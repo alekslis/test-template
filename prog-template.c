@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <unistd.h>
-
+//testgita
 static knet_dev_t * dsPic; // robot pic microcontroller access
 int maxsp,accinc,accdiv,minspacc, minspdec; // for speed profile
 static int quitReq = 0; // quit variable for loop
@@ -83,7 +83,7 @@ void odometria()
 	long delta_pos_left, delta_pos_right;
 	float delta_left, delta_right, delta_theta, theta2;
 	float delta_x, delta_y;
-        
+
 		kh4_get_position(&pos_left,&pos_right,dsPic);
 		delta_pos_left = pos_left - pos_left_prev;
 		delta_pos_right = pos_right - pos_right_prev;
@@ -109,7 +109,7 @@ void odometria()
     //float deg_goalangle_f=floorf(deg_goalangle);
     float deg_alpha=0;
     //float deg_alpha_f;
-    
+
     //deg_alpha=alpha * 180.0 / PI;
     float deg_res_th=result_theta * 180.0 / PI;
     float deg_goalangle=goalangle * 180.0 / PI;
@@ -126,12 +126,12 @@ void odometria()
 	        alpha += 2 * PI;
 	    }
         //printf("Alfa %f\n",alpha);
-	    
+
         //printf("Deg_alfa %f\n",deg_alpha);
         //deg_alpha_f=floorf(deg_alpha);
         //printf("Deg_alfa %f\n",deg_alpha_f);
         cel_kat=alpha;
-           
+
 	       if (result_theta<goalangle)
            {
                kh4_get_position(&poz_l,&poz_r,dsPic);
@@ -147,7 +147,7 @@ void odometria()
            }
            else if (result_theta>goalangle)
            {
-               
+
                kh4_get_position(&poz_l,&poz_r,dsPic);
                kh4_SetMode(kh4RegPosition,dsPic );
                kh4_set_position(poz_l-9456,poz_r+9456,dsPic);
@@ -159,8 +159,8 @@ void odometria()
                //sleep(2);
            }
            else
-           {    
-               
+           {
+
                return;
            }
    // }
@@ -293,7 +293,7 @@ void run_goto_heading(float goal_theta) {
             kh4_SetRGBLeds(0,5,0,0,0,0,0,0,0,dsPic);
         }
         //khepera4_drive_set_speed_differential_bounded(og.configuration.speed_max, 0, 0, diff_theta * 8., 1);
-        
+
     }
     kh4_SetRGBLeds(0,5,0,0,5,0,0,5,0,dsPic);
     kh4_set_speed(0,0,dsPic);
@@ -308,7 +308,7 @@ void run_goto_heading(float goal_theta) {
 
 int test()
 {
-    
+
     kh4_activate_us(31,dsPic); //wl. ultradzwiekowe
     int sl, sr;
     int i;
@@ -333,12 +333,12 @@ int test()
 	kh4_SetMode(kh4RegSpeedProfile,dsPic);
 	//inicjalizacja odometrii
 	kh4_get_position(&pos_left,&pos_right,dsPic);
-    
+
 	result_x = 0;
 	result_y = 0;
 	result_theta = 0;
 	//timestamp = 0;
-	
+
 	pos_left_prev = pos_left;
 	pos_right_prev = pos_right;
 	//kh4_set_speed(sl, sr, dsPic);
@@ -348,7 +348,7 @@ int test()
     scanf("%d", &sl);
     printf("Prawe:");
     scanf("%d", &sr);
- 
+
     for(ii=0;ii<2;ii++)
 	{
 		for(jj=0;jj<3;jj++)
@@ -377,8 +377,8 @@ int test()
         }
         /*
         kh4_SetMode(kh4RegPosition,dsPic);
-        
-        
+
+
 	    if (maxi==0){
             kh4_set_position(poz_l-10000,poz_r+10000,dsPic);
             sleep(2);
@@ -404,10 +404,10 @@ int test()
 
 	while(!kb_kbhit())
     {
-        
+
         kb_clrscr();
         //kh4_get_position(&poz_l,&poz_r,dsPic);
-        
+
         kh4_proximity_ir(Buffer, dsPic);
         for (i=0;i<12;i++)
 		{
@@ -423,10 +423,10 @@ int test()
                 maxi=i;
             }*/
         }
-        
+
             //float gotox,gotoy;
-    
-    
+
+
     odometria();
     if (usvalues[2]>30 && usvalues[2]<1000)
     {
@@ -436,7 +436,7 @@ int test()
         //kh4_SetMode(kh4RegSpeedProfile,dsPic);
         kh4_set_speed(sl,sr,dsPic);
         kh4_SetRGBLeds(0,0,7,0,0,7,0,5,0,dsPic);
-  
+
     }
     else if((usvalues[0]>25 && usvalues[0]<1000) || (usvalues[1]>25 && usvalues[1]<1000) || sensors [3] > 150)
     {
@@ -455,7 +455,7 @@ int test()
         //usleep(200000);
         //kh4_SetMode(kh4RegSpeedProfile,dsPic);
         //gotox=result_x;
-        //gotoy=result_y+0.1; 
+        //gotoy=result_y+0.1;
 
         run_goto_heading(1.57);
     }
@@ -467,13 +467,13 @@ int test()
         //kh4_set_speed(r_speed_left,r_speed_right,dsPic);
         printf("Czujniki us\nl90: %4d\nfl45: %4d\nf0: %4d\nfr45: %4d\nr90: %4d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
         fprintf(ustxt,"%d %d %d %d %d\n",usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
-		
+
 		printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.4f\n",result_x, result_y, result_theta);
-		fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta); 
+		fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
         usleep(20000);
        // }
        // odometria_init();
-        /* 
+        /*
         for(i=0;i<5;i++)
         {
         	if (i==0) { ii=1; jj=0;}
@@ -498,8 +498,8 @@ int test()
         	}
         	printf("\n");
         }
-        */        
-        
+        */
+
         //printf("Alfa %f\n",cel_kat);
         float kat_skret_p=1.571;
         float kat_skret_l=-1.571;
@@ -507,7 +507,7 @@ int test()
         /*
         if (sensors[2] > 150 || sensors[1]>150) //przeszkoda lewo i przod
         	        {
-                        
+
         	        //skret(kat_skret_p);
 
                kh4_get_position(&poz_l,&poz_r,dsPic);
@@ -524,7 +524,7 @@ int test()
         	        }
         else if (sensors[4] > 150 || sensors[5]>150) //przeszkoda prawo i przod
         	        {
-        	        
+
         	        //skret(kat_skret_l);
 
         	   kh4_get_position(&poz_l,&poz_r,dsPic);
