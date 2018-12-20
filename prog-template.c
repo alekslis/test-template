@@ -296,19 +296,24 @@ void run_goto_heading(float goal_theta) {
         }
         del_theta=diff_theta;
         // Termination condition
-        if (fabs(diff_theta) < 0.01) {
+        /*if (fabs(diff_theta) < 0.01) {
           atheading=1;
-
+        }*/
+        if (atheading!=0){
+          return;
         }
-        if ((diff_theta>0) || (diff_theta<diff_theta-0.1))
+        if ((diff_theta>0) && (diff_theta>0.02))
         {
             kh4_set_speed(50,-50,dsPic);
             kh4_SetRGBLeds(0,0,0,0,5,0,0,0,0,dsPic);
         }
-        else if ((diff_theta<0) || (diff_theta>diff_theta+0.1))
+        else if ((diff_theta<0) && (diff_theta<-0.02))
         {
             kh4_set_speed(-50,50,dsPic);
             kh4_SetRGBLeds(0,5,0,0,0,0,0,0,0,dsPic);
+        }
+        else{
+          atheading=1;
         }
         //khepera4_drive_set_speed_differential_bounded(og.configuration.speed_max, 0, 0, diff_theta * 8., 1);
 
