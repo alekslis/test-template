@@ -29,6 +29,8 @@ static void ctrlc_handler( int sig )
 #define deg_PI 180.0
 #define PLIK_XY "pozycjaxy.txt"
 #define PLIK_US "us_readings.txt"
+#define MAX_US_DIST 250
+#define MIN_US_DIST 25
 int sl, sr; //predkosci lewego i prawego
 //zmienne do odometrii
 int pos_left_prev;
@@ -51,8 +53,10 @@ int r_speed_right;
 int closetogoal;
 int veryclosetogoal;
 int atgoal;
-
+float r_theta;
 float cel_kat;
+float del_theta;
+int atheading;
 void odometria_init()
 {
 	//Odometria - domyslne dane
@@ -71,6 +75,9 @@ void odometria_init()
     atgoal=0;
     veryclosetogoal=0;
     closetogoal=0;
+    r_theta=0;
+    del_theta=0;
+    atheading=0;
 }
 
 /*void odo_start(float gotoxx,float gotoyy)
@@ -96,6 +103,12 @@ void odometria()
 		result_x += delta_x;
 		result_y += delta_y;
 		result_theta += delta_theta;
+    while (result_theta > PI) {
+        result_theta -= 2 * PI;
+    }
+    while (result_theta < -PI) {
+        result_theta += 2 * PI;
+    }
 		//timestamp = khepera4_current_time();
 		pos_left_prev = pos_left;
 		pos_right_prev = pos_right;
@@ -264,11 +277,16 @@ void run_goto_heading(float goal_theta) {
     float diff_theta;
 
     // Move until we have reached the target position
-    while (1) {
+      //while (atheading==0) {
         // Update position and calculate new speeds
-        odometria();
-
+        //odometria();
+        //printf("Aktualna pozycja robota(skret): x: %.3f  y: %.3f  kat: %.4f\n",result_x, result_y, result_theta);
+        //printf("Czujniki us(skret)\nl90: %4d\nfl45: %4d\nf0: %4d\nfr45: %4d\nr90: %4d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
         // Calculate the current heading error
+        if (atheading!=0){
+          printf("kat os.");
+          return;
+        }
         diff_theta = goal_theta - result_theta;
         while (diff_theta > PI) {
             diff_theta -= 2 * PI;
@@ -276,39 +294,38 @@ void run_goto_heading(float goal_theta) {
         while (diff_theta < -PI) {
             diff_theta += 2 * PI;
         }
-
+        del_theta=diff_theta;
         // Termination condition
         if (fabs(diff_theta) < 0.01) {
-            break;
-        }
+          atheading=1;
 
-        if (diff_theta>0)
+        }
+        if ((diff_theta>0) || (diff_theta<diff_theta-0.1))
         {
             kh4_set_speed(50,-50,dsPic);
             kh4_SetRGBLeds(0,0,0,0,5,0,0,0,0,dsPic);
         }
-        else if (diff_theta<0)
+        else if ((diff_theta<0) || (diff_theta>diff_theta+0.1))
         {
             kh4_set_speed(-50,50,dsPic);
             kh4_SetRGBLeds(0,5,0,0,0,0,0,0,0,dsPic);
         }
         //khepera4_drive_set_speed_differential_bounded(og.configuration.speed_max, 0, 0, diff_theta * 8., 1);
 
-    }
-    kh4_SetRGBLeds(0,5,0,0,5,0,0,5,0,dsPic);
+    //}
+    /*kh4_SetRGBLeds(0,5,0,0,5,0,0,5,0,dsPic);
     kh4_set_speed(0,0,dsPic);
-    sleep(2);
-    return;
+
+    usleep(100);
+    */
     // Stop the motors
-    //khepera4_drive_set_speed(0, 0);
+
+
 
 }
 
-
-
 int test()
 {
-
     kh4_activate_us(31,dsPic); //wl. ultradzwiekowe
     int sl, sr;
     int i;
@@ -326,8 +343,8 @@ int test()
 	maxsp=400;
     int ii,jj;
     int mapka[2][3];
-    int max_us=0;
-    int maxi;
+    short max_us=0;
+    int maxi=0;
     int poz_l,poz_r;
 	kh4_SetSpeedProfile(accinc,accdiv,minspacc, minspdec,maxsp,dsPic ); // Acceleration increment ,  Acceleration divider, Minimum speed acc, Minimum speed dec, maximum speed
 	kh4_SetMode(kh4RegSpeedProfile,dsPic);
@@ -341,14 +358,14 @@ int test()
 
 	pos_left_prev = pos_left;
 	pos_right_prev = pos_right;
-	//kh4_set_speed(sl, sr, dsPic);
+
     odometria_init();
     printf("Predkosci kol\n");
     printf("Lewe:");
     scanf("%d", &sl);
     printf("Prawe:");
     scanf("%d", &sr);
-
+    kh4_set_speed(sl, sr, dsPic);
     for(ii=0;ii<2;ii++)
 	{
 		for(jj=0;jj<3;jj++)
@@ -364,81 +381,72 @@ int test()
 		}
 		printf("\n");
 	}
-    /*
-    kh4_measure_us(Buffer,dsPic);
-    for (i=0;i<5;i++)
-        {
-        	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
-            if (usvalues[i]>max_us)
-            {
-                max_us=usvalues[i];
-                maxi=i;
-            }
+	while(!kb_kbhit()){
+    kb_clrscr();
+        //kh4_get_position(&poz_l,&poz_r,dsPic);
+    odometria();
+    kh4_proximity_ir(Buffer, dsPic);
+        for (i=0;i<12;i++){
+			       sensors[i]=(Buffer[i*2] | Buffer[i*2+1]<<8);
         }
-        /*
-        kh4_SetMode(kh4RegPosition,dsPic);
+    kh4_measure_us(Buffer,dsPic);
+        for (i=0;i<5;i++){
+        	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
+          if(usvalues[i]>MAX_US_DIST){
+            usvalues[i]=0;
+          }
+          else if(usvalues[i]<MIN_US_DIST){
+            usvalues[i]=0;
+          }
+          if (usvalues[i]>max_us){
+              max_us=usvalues[i];
+              maxi=i;
+          }
+        }
 
-
-	    if (maxi==0){
-            kh4_set_position(poz_l-10000,poz_r+10000,dsPic);
-            sleep(2);
+//GDZIE NAJWIECEJ PRZESTRZENI
+      if (maxi==0){
+            //kh4_set_position(poz_l-10000,poz_r+10000,dsPic);
+            //sleep(2);
+            r_theta=result_theta-1.571;
         }
         else if(maxi==1){
-            kh4_set_position(poz_l-5000,poz_r+5000,dsPic);
-            sleep(2);
+            //kh4_set_position(poz_l-5000,poz_r+5000,dsPic);
+            //sleep(2);
+            r_theta=result_theta-0.8;
         }
         else if(maxi==2){
-            kh4_set_position(5000,5000,dsPic);
-            sleep(2);
+            //kh4_set_position(5000,5000,dsPic);
+            //sleep(2);
+            kh4_set_speed(sl,sr,dsPic);
         }
         else if(maxi==3){
-            kh4_set_position(poz_l+5000,poz_r-5000,dsPic);
-            sleep(2);
+            //kh4_set_position(poz_l+5000,poz_r-5000,dsPic);
+            //sleep(2);
+            r_theta=result_theta+0.8;
         }
         else if(maxi==4){
-            kh4_set_position(poz_l+10000,poz_r-10000,dsPic);
-            sleep(2);
+            //kh4_set_position(poz_l+10000,poz_r-10000,dsPic);
+            //sleep(2);
+            r_theta=result_theta+1.571;
         }
-        kh4_SetMode(kh4RegSpeedProfile,dsPic);
-        */
-
-	while(!kb_kbhit())
-    {
-
-        kb_clrscr();
-        //kh4_get_position(&poz_l,&poz_r,dsPic);
-
-        kh4_proximity_ir(Buffer, dsPic);
-        for (i=0;i<12;i++)
-		{
-			sensors[i]=(Buffer[i*2] | Buffer[i*2+1]<<8);
-        }
-        kh4_measure_us(Buffer,dsPic);
-        for (i=0;i<5;i++)
-        {
-        	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
-            /*if (usvalues[i]>max_us)
-            {
-                max_us=usvalues[i];
-                maxi=i;
-            }*/
-        }
-
+        run_goto_heading(r_theta);
+        //kh4_SetMode(kh4RegSpeedProfile,dsPic);
             //float gotox,gotoy;
-
-
-    odometria();
+/*
     if (usvalues[2]>30 && usvalues[2]<1000)
     {
         //gotox=result_x+0.1;
         //gotoy=result_y;
         //usleep(200000);
         //kh4_SetMode(kh4RegSpeedProfile,dsPic);
-        kh4_set_speed(sl,sr,dsPic);
+        r_theta=result_theta;
+
+        //kh4_set_speed(sl,sr,dsPic);
         kh4_SetRGBLeds(0,0,7,0,0,7,0,5,0,dsPic);
 
     }
-    else if((usvalues[0]>25 && usvalues[0]<1000) || (usvalues[1]>25 && usvalues[1]<1000) || sensors [3] > 150)
+    else if((usvalues[0]>25 && usvalues[0]<1000)) //|| (usvalues[1]>25 && usvalues[1]<1000) || sensors [3] > 150)
     {
         //kh4_SetMode(kh4RegPosition,dsPic);
         //kh4_set_position(poz_l-10000,poz_r+10000,dsPic);
@@ -446,9 +454,9 @@ int test()
         //kh4_SetMode(kh4RegSpeedProfile,dsPic);
         //gotox=result_x;
         //gotoy=result_y-0.1;
-        run_goto_heading(-1.57);
+        r_theta=result_theta-1.571;
     }
-    else if(usvalues[4]>30 && usvalues[0]<1000 || sensors [3] > 150)
+    else if(usvalues[4]>25 && usvalues[4]<1000 )//|| sensors [3] > 150)
     {
         //kh4_SetMode(kh4RegPosition,dsPic);
         //kh4_set_position(poz_l+10000,poz_r-10000,dsPic);
@@ -457,20 +465,26 @@ int test()
         //gotox=result_x;
         //gotoy=result_y+0.1;
 
-        run_goto_heading(1.57);
+        r_theta=result_theta+1.571;
     }
-    kh4_set_speed(sl,sr,dsPic);
+
+      run_goto_heading(r_theta);
+      //sleep(1);
+*/
+      printf("MAXI%d\n",maxi);
+      printf("Czujniki us\nl90: %4d\nfl45: %4d\nf0: %4d\nfr45: %4d\nr90: %4d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
+      fprintf(ustxt,"%d %d %d %d %d\n",usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
+
+      printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.4f\n",result_x, result_y, result_theta);
+      fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
+    //kh4_set_speed(sl,sr,dsPic);
         //while(atgoal==0)
         //{
         //odometria();
         //odometry_goto(gotox,gotoy);
         //kh4_set_speed(r_speed_left,r_speed_right,dsPic);
-        printf("Czujniki us\nl90: %4d\nfl45: %4d\nf0: %4d\nfr45: %4d\nr90: %4d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
-        fprintf(ustxt,"%d %d %d %d %d\n",usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
 
-		printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.4f\n",result_x, result_y, result_theta);
-		fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
-        usleep(20000);
+        //usleep(20000);
        // }
        // odometria_init();
         /*
@@ -500,46 +514,6 @@ int test()
         }
         */
 
-        //printf("Alfa %f\n",cel_kat);
-        float kat_skret_p=1.571;
-        float kat_skret_l=-1.571;
-        int poz_l,poz_r;
-        /*
-        if (sensors[2] > 150 || sensors[1]>150) //przeszkoda lewo i przod
-        	        {
-
-        	        //skret(kat_skret_p);
-
-               kh4_get_position(&poz_l,&poz_r,dsPic);
-               kh4_SetMode(kh4RegPosition,dsPic );
-               kh4_set_position(poz_l+9456,poz_r-9456,dsPic);
-               //kh4_set_speed(50,-50,dsPic); //prawo
-               kh4_SetRGBLeds(8,0,0,0,0,0,0,0,0,dsPic);
-               usleep(200000);
-               kh4_SetMode(kh4RegSpeedProfile,dsPic);
-               //kh4_set_speed(0,0,dsPic);
-               //sleep(2);
-        	        	//kh4_set_speed(100,-100, dsPic);
-        	        	//kh4_SetRGBLeds(1,0,0,0,0,0,0,0,0,dsPic);
-        	        }
-        else if (sensors[4] > 150 || sensors[5]>150) //przeszkoda prawo i przod
-        	        {
-
-        	        //skret(kat_skret_l);
-
-        	   kh4_get_position(&poz_l,&poz_r,dsPic);
-               kh4_SetMode(kh4RegPosition,dsPic );
-               kh4_set_position(poz_l-9456,poz_r+9456,dsPic);
-               //kh4_set_speed(-50,50,dsPic); //lewo
-               kh4_SetRGBLeds(0,0,0,8,0,0,0,0,0,dsPic);
-                usleep(200000);
-                kh4_SetMode(kh4RegSpeedProfile,dsPic);
-        	        }
-        else
-        {
-            kh4_set_speed(sl,sr,dsPic);
-        }
-        */
         printf("\nNacisnij klawisz aby zatrzymac\n");
         usleep(100);
     }
