@@ -57,6 +57,11 @@ float r_theta;
 float cel_kat;
 float del_theta;
 int atheading;
+char Buffer[256];
+short usvalues[5];
+int sensors[12];
+float skret;
+int ava_tab[100][100];
 void odometria_init()
 {
 	//Odometria - domyslne dane
@@ -120,72 +125,7 @@ void odometria()
 		pos_left_prev = pos_left;
 		pos_right_prev = pos_right;
 }
-/*float skret(float goalangle)
-{
-    float alpha;
-    //goalangle = 1.571
-    //int poz_l,poz_r;
-    //float deg_res_th_f=floorf(deg_res_th);
-    //float deg_goalangle_f=floorf(deg_goalangle);
-    float deg_alpha=0;
-    //float deg_alpha_f;
 
-    //deg_alpha=alpha * 180.0 / PI;
-    float deg_res_th=result_theta * 180.0 / PI;
-    float deg_goalangle=goalangle * 180.0 / PI;
-    //while((goalangle-result_theta)<-0.1 || (goalangle-result_theta)>0.1){
-    //    kb_clrscr();
-        alpha = goalangle - result_theta;
-        printf("goalangle: %f\nresult_theta: %f\n",goalangle,result_theta);
-	    while (alpha > PI)
-	    {
-	    	alpha -= 2 * PI;
-	    }
-	    while (alpha < -PI)
-	    {
-	        alpha += 2 * PI;
-	    }
-        //printf("Alfa %f\n",alpha);
-
-        //printf("Deg_alfa %f\n",deg_alpha);
-        //deg_alpha_f=floorf(deg_alpha);
-        //printf("Deg_alfa %f\n",deg_alpha_f);
-        cel_kat=alpha;
-
-	       if (result_theta<goalangle)
-           {
-               kh4_get_position(&poz_l,&poz_r,dsPic);
-               kh4_SetMode(kh4RegPosition,dsPic );
-               kh4_set_position(poz_l+9456,poz_r-9456,dsPic);
-               //kh4_set_speed(50,-50,dsPic); //prawo
-               kh4_SetRGBLeds(8,0,0,0,0,0,0,0,0,dsPic);
-               usleep(200000);
-               kh4_SetMode(kh4RegSpeedProfile,dsPic);
-               //kh4_set_speed(0,0,dsPic);
-               //sleep(2);
-
-           }
-           else if (result_theta>goalangle)
-           {
-
-               kh4_get_position(&poz_l,&poz_r,dsPic);
-               kh4_SetMode(kh4RegPosition,dsPic );
-               kh4_set_position(poz_l-9456,poz_r+9456,dsPic);
-               //kh4_set_speed(-50,50,dsPic); //lewo
-               kh4_SetRGBLeds(0,0,0,8,0,0,0,0,0,dsPic);
-                usleep(200000);
-                kh4_SetMode(kh4RegSpeedProfile,dsPic);
-               //kh4_set_speed(0,0,dsPic);
-               //sleep(2);
-           }
-           else
-           {
-
-               return;
-           }
-   // }
-return 0;
-}*/
 void odometry_goto(float goal_x,float goal_y)
 {
 	       //STEP
@@ -328,15 +268,54 @@ void run_goto_heading(float goal_theta) {
     */
     // Stop the motors
 }
+void check_space()
+{
+  if (usvalues[2]>50){
+    maxus=usvalues[2];
+  }
+  else if (usvalues[0]>maxus){
+    maxus=usvalues[0];
+    skret=-1.571;
+  }
 
+  else if (usvalues[4]>maxus){
+    maxus=usvalues[4];
+    skret=1.571;
+  }
+  /*else if (usvalues[1]>maxus){
+    maxus=usvalues[1];
+    skret=-0.785;
+  }
+  else if (usvalues[3]>maxus){
+    maxus=usvalues[3];
+    skret=0.785;
+  }*/
+}
+
+void set_ava()
+{
+  int current_x,current_y;
+  current_x= round(result_x * 10);
+  current_y=round(result_y * 10);
+  ava_tab[current_x][current_y]=1;
+}
+void check_ava()
+{
+
+  float g_sensor_angle1=result_theta-1.571;
+  float g_sensor_angle3=result_theta;
+  float g_sensor_angle5=result_theta+1.571;
+  float g_sensor_angle7=result_theta+PI;
+  int current_x,current_y;
+  cur_x= round(result_x * 10);
+  cur_y= round(result_y * 10);
+  if (ava_tab[cur_x+1][cur_y]=0)
+}
 int test()
 {
     kh4_activate_us(31,dsPic); //wl. ultradzwiekowe
-    int sl, sr;
     int i;
-    char Buffer[256];
-    short usvalues[5];
-    int sensors[12];
+
     FILE *xytxt;
 	xytxt = fopen(PLIK_XY,"w");
     FILE *ustxt;
@@ -358,13 +337,16 @@ int test()
     printf("Prawe:");
     scanf("%d", &sr);
     kh4_set_speed(sl, sr, dsPic);
-    for(ii=0;ii<2;ii++)
-	{
-		for(jj=0;jj<3;jj++)
-		{
-			mapka[ii][jj]=0;
+    for(ii=0;ii<2;ii++){
+		    for(jj=0;jj<3;jj++){
+          mapka[ii][jj]=0;
 		}
 	}
+  for(ii=0;ii<100;ii++){
+    for(jj=0;jj<100;jj++){
+      ava_tab[ii][jj]=0;
+  }
+}
   /*
 	for(ii=0;ii<2;ii++)
 	{
@@ -392,39 +374,8 @@ int test()
           else if(usvalues[i]<MIN_US_DIST){
             usvalues[i]=0;
           }
-          if (usvalues[i]>max_us){
-              max_us=usvalues[i];
-              maxi=i;
-          }
         }
-
-//GDZIE NAJWIECEJ PRZESTRZENI
-      if (maxi==0){
-            //kh4_set_position(poz_l-10000,poz_r+10000,dsPic);
-            //sleep(2);
-            r_theta=result_theta-1.571;
-        }
-        else if(maxi==1){
-            //kh4_set_position(poz_l-5000,poz_r+5000,dsPic);
-            //sleep(2);
-            r_theta=result_theta-0.8;
-        }
-        else if(maxi==2){
-            //kh4_set_position(5000,5000,dsPic);
-            //sleep(2);
-            kh4_set_speed(sl,sr,dsPic);
-        }
-        else if(maxi==3){
-            //kh4_set_position(poz_l+5000,poz_r-5000,dsPic);
-            //sleep(2);
-            r_theta=result_theta+0.8;
-        }
-        else if(maxi==4){
-            //kh4_set_position(poz_l+10000,poz_r-10000,dsPic);
-            //sleep(2);
-            r_theta=result_theta+1.571;
-        }
-        run_goto_heading(r_theta);
+        run_goto_heading(result_theta+skret);
         //kh4_SetMode(kh4RegSpeedProfile,dsPic);
             //float gotox,gotoy;
 /*
