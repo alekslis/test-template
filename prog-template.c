@@ -25,8 +25,9 @@ static void ctrlc_handler( int sig )
 #define MAX_DIST 500
 #define MIN_DIST 80 // 70
 #define PI 3.14159265358979
-#define M_PI 3.14159265358979323846
-#define deg_PI 180.0
+#define R_45 0.785398
+#define R_90 1.570796
+#define DEG_PI 180.0
 #define PLIK_XY "pozycjaxy.txt"
 #define PLIK_US "us_readings.txt"
 #define MAX_US_DIST 250
@@ -61,7 +62,11 @@ char Buffer[256];
 short usvalues[5];
 int sensors[12];
 float skret;
+float maxus;
 int ava_tab[100][100];
+FILE *xytxt;
+FILE *ustxt;
+
 void odometria_init()
 {
 	//Odometria - domyslne dane
@@ -70,7 +75,7 @@ void odometria_init()
 	wheel_conversion_right = 0.13194 / 19456.0;
     acceleration_step = 2.;
     speed_min = 10.;
-    speed_max = 90.;
+    speed_max = 150.;
     gotox = 0.;
     gotoy = 0.;
     speed_left_internal = 0;
@@ -91,12 +96,6 @@ void odometria_init()
     del_theta=0;
     atheading=0;
 }
-
-/*void odo_start(float gotoxx,float gotoyy)
-{
-    gotox=gotoxx;
-    gotoyy
-}*/
 void odometria()
 {
 	long delta_pos_left, delta_pos_right;
@@ -129,17 +128,30 @@ void odometria()
 void odometry_goto(float goal_x,float goal_y)
 {
 	       //STEP
+         atgoal=0;
+         veryclosetogoal=0;
+         closetogoal=0;
 	       float dx, dy;
 	       float distance, goalangle, alpha;
 	       float speedfactor;
 	       long speed_left_wish, speed_right_wish;
 	       int atmaxspeed = 0;
+
+
+        while(!kb_kbhit()){
+          kb_clrscr();
+          int atmaxspeed = 0;
+
 	       // Do nothing if we are at goal
+         kh4_SetRGBLeds(5,5,0,5,5,0,5,5,0,dsPic);
+         odometria();
+         printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.4f\n",result_x, result_y, result_theta);
+         fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
 	       if (atgoal != 0)
 	       {
 	    	   kh4_SetRGBLeds(0,5,0,0,5,0,0,5,0,dsPic);
-	    	   printf("U CELU \n");
-	    	   return;
+           kh4_set_speed(0,0,dsPic);
+	    	   break;
 	       }
 	       // Calculate new wish speeds
 	       dx = goal_x - result_x;
@@ -172,7 +184,7 @@ void odometry_goto(float goal_x,float goal_y)
 	        if (veryclosetogoal)
 	        {
 	        	speed_left_wish = 0;
-	            speed_right_wish = 0;
+	          speed_right_wish = 0;
 	        }
 
 	        // Limit acceleration
@@ -204,6 +216,7 @@ void odometry_goto(float goal_x,float goal_y)
 	        {
 	            r_speed_right = 0;
 	        }
+
 	        // Termination condition
 	        if (atmaxspeed == 0)
 	        {
@@ -218,16 +231,23 @@ void odometry_goto(float goal_x,float goal_y)
 	            	atgoal = 1;
 	            }
 	        }
+          kh4_set_speed(r_speed_left,r_speed_right,dsPic);
+
+        }
+        usleep(1000);
 }
 
 void run_goto_heading(float goal_theta) {
     float diff_theta;
     float res_theta=0;
+    atheading=0;
     // Move until we have reached the target position
-      while (1) {
+      while(!kb_kbhit()) {
+        kb_clrscr();
         // Update position and calculate new speeds
         odometria();
-        //printf("Aktualna pozycja robota(skret): x: %.3f  y: %.3f  kat: %.4f\n",result_x, result_y, result_theta);
+        printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
+        fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
         //printf("Czujniki us(skret)\nl90: %4d\nfl45: %4d\nf0: %4d\nfr45: %4d\nr90: %4d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
         // Calculate the current heading error
         diff_theta = goal_theta - result_theta;
@@ -243,14 +263,15 @@ void run_goto_heading(float goal_theta) {
           atheading=1;
         }*/
         if (atheading!=0){
+          kh4_set_speed(0,0,dsPic);
           break;
         }
-        if ((diff_theta>0) && (diff_theta>0.02))
+        if ((diff_theta>0) && (diff_theta>0.01))
         {
             kh4_set_speed(50,-50,dsPic);
             kh4_SetRGBLeds(0,0,0,0,5,0,0,0,0,dsPic);
         }
-        else if ((diff_theta<0) && (diff_theta<-0.02))
+        else if ((diff_theta<0) && (diff_theta<-0.01))
         {
             kh4_set_speed(-50,50,dsPic);
             kh4_SetRGBLeds(0,5,0,0,0,0,0,0,0,dsPic);
@@ -295,31 +316,31 @@ void check_space()
 void set_ava()
 {
   int current_x,current_y;
-  current_x= round(result_x * 10);
-  current_y=round(result_y * 10);
+  current_x= (int)(round(result_x * 10));
+  current_y= (int)(round(result_y * 10));
   ava_tab[current_x][current_y]=1;
 }
 void check_ava()
 {
-
+  float curx,cury;
+  int cur_x,cur_y;
   float g_sensor_angle1=result_theta-1.571;
   float g_sensor_angle3=result_theta;
   float g_sensor_angle5=result_theta+1.571;
   float g_sensor_angle7=result_theta+PI;
   int current_x,current_y;
-  cur_x= round(result_x * 10);
-  cur_y= round(result_y * 10);
-  if (ava_tab[cur_x+1][cur_y]=0)
+  curx = round(result_x * 10);
+  cur_x = (int)curx;
+  cury = round(result_y * 10);
+  cur_y = (int)cury;
+
 }
 int test()
 {
+    xytxt = fopen(PLIK_XY,"w");
+    ustxt = fopen(PLIK_US,"w");
     kh4_activate_us(31,dsPic); //wl. ultradzwiekowe
     int i;
-
-    FILE *xytxt;
-	xytxt = fopen(PLIK_XY,"w");
-    FILE *ustxt;
-	ustxt = fopen(PLIK_US,"w");
     int ii,jj;
     int mapka[2][3];
     short max_us=0;
@@ -359,6 +380,7 @@ int test()
   */
 	while(!kb_kbhit()){
     kb_clrscr();
+    kh4_get_position(&pos_left,&pos_right,dsPic);
         //kh4_get_position(&poz_l,&poz_r,dsPic);
     odometria();
     kh4_proximity_ir(Buffer, dsPic);
@@ -375,9 +397,10 @@ int test()
             usvalues[i]=0;
           }
         }
-        run_goto_heading(result_theta+skret);
-        //kh4_SetMode(kh4RegSpeedProfile,dsPic);
-            //float gotox,gotoy;
+        run_goto_heading(0.785398);
+        run_goto_heading(1.570796);
+
+
 /*
     if (usvalues[2]>30 && usvalues[2]<1000)
     {
@@ -416,11 +439,11 @@ int test()
       run_goto_heading(r_theta);
       //sleep(1);
 */
-      printf("MAXI%d\n",maxi);
-      printf("Czujniki us\nl90: %4d\nfl45: %4d\nf0: %4d\nfr45: %4d\nr90: %4d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
+
+      printf("Czujniki us\nL 90 (0): %4\nFL 45 (1): %d\nF 0(2): %d\nFR 45 (3): %d\nR 90 (4): %d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
       fprintf(ustxt,"%d %d %d %d %d\n",usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
 
-      printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.4f\n",result_x, result_y, result_theta);
+      printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
       fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
     //kh4_set_speed(sl,sr,dsPic);
         //while(atgoal==0)
@@ -431,7 +454,7 @@ int test()
 
         //usleep(20000);
        // }
-       // odometria_init();
+
         /*
         for(i=0;i<5;i++)
         {
@@ -466,8 +489,7 @@ int test()
     kh4_set_speed(0,0,dsPic ); // stop robot
     //kh4_SetMode( kh4RegIdle,dsPic ); // set motors to idle
 
-    fclose(xytxt);
-    fclose(ustxt);
+
     kh4_activate_us(0,dsPic); //wyl. ultradzwiekowe
     return 0;
 }
@@ -527,6 +549,8 @@ int main(int argc, char * argv[])
     break;
   }
 //zakończenie działania
+fclose(xytxt);
+fclose(ustxt);
   kh4_set_speed(0 ,0 ,dsPic); // stop robot
   kh4_SetMode( kh4RegIdle,dsPic ); // set motors to idle
   kh4_SetRGBLeds(0,0,0,0,0,0,0,0,0,dsPic); // clear rgb leds because consumes energy
