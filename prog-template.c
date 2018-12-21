@@ -72,6 +72,13 @@ void odometria_init()
     speed_right_internal = 0;
     r_speed_left = 0;
     r_speed_right = 0;
+    result_x = 0;
+    result_y = 0;
+    result_theta = 0;
+    //timestamp = 0;
+
+    pos_left_prev = pos_left;
+    pos_right_prev = pos_right;
     atgoal=0;
     veryclosetogoal=0;
     closetogoal=0;
@@ -275,18 +282,14 @@ void odometry_goto(float goal_x,float goal_y)
 
 void run_goto_heading(float goal_theta) {
     float diff_theta;
-
+    float res_theta=0;
     // Move until we have reached the target position
-      //while (atheading==0) {
+      while (1) {
         // Update position and calculate new speeds
-        //odometria();
+        odometria();
         //printf("Aktualna pozycja robota(skret): x: %.3f  y: %.3f  kat: %.4f\n",result_x, result_y, result_theta);
         //printf("Czujniki us(skret)\nl90: %4d\nfl45: %4d\nf0: %4d\nfr45: %4d\nr90: %4d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
         // Calculate the current heading error
-        if (atheading!=0){
-          printf("kat os.");
-          return;
-        }
         diff_theta = goal_theta - result_theta;
         while (diff_theta > PI) {
             diff_theta -= 2 * PI;
@@ -300,7 +303,7 @@ void run_goto_heading(float goal_theta) {
           atheading=1;
         }*/
         if (atheading!=0){
-          return;
+          break;
         }
         if ((diff_theta>0) && (diff_theta>0.02))
         {
@@ -317,16 +320,13 @@ void run_goto_heading(float goal_theta) {
         }
         //khepera4_drive_set_speed_differential_bounded(og.configuration.speed_max, 0, 0, diff_theta * 8., 1);
 
-    //}
+    }
     /*kh4_SetRGBLeds(0,5,0,0,5,0,0,5,0,dsPic);
     kh4_set_speed(0,0,dsPic);
 
     usleep(100);
     */
     // Stop the motors
-
-
-
 }
 
 int test()
@@ -341,11 +341,6 @@ int test()
 	xytxt = fopen(PLIK_XY,"w");
     FILE *ustxt;
 	ustxt = fopen(PLIK_US,"w");
-	accinc=10;//3;
-	accdiv=0;
-	minspacc=20;
-	minspdec=1;
-	maxsp=400;
     int ii,jj;
     int mapka[2][3];
     short max_us=0;
@@ -355,14 +350,6 @@ int test()
 	kh4_SetMode(kh4RegSpeedProfile,dsPic);
 	//inicjalizacja odometrii
 	kh4_get_position(&pos_left,&pos_right,dsPic);
-
-	result_x = 0;
-	result_y = 0;
-	result_theta = 0;
-	//timestamp = 0;
-
-	pos_left_prev = pos_left;
-	pos_right_prev = pos_right;
 
     odometria_init();
     printf("Predkosci kol\n");
@@ -378,6 +365,7 @@ int test()
 			mapka[ii][jj]=0;
 		}
 	}
+  /*
 	for(ii=0;ii<2;ii++)
 	{
 		for(jj=0;jj<3;jj++)
@@ -386,6 +374,7 @@ int test()
 		}
 		printf("\n");
 	}
+  */
 	while(!kb_kbhit()){
     kb_clrscr();
         //kh4_get_position(&poz_l,&poz_r,dsPic);
@@ -524,14 +513,8 @@ int test()
     }
     //tcflush(0, TCIFLUSH); // flush input
     kh4_set_speed(0,0,dsPic ); // stop robot
-    kh4_SetMode( kh4RegIdle,dsPic ); // set motors to idle
-    accinc=3;//3;
-    accdiv=0;
-    minspacc=20;
-    minspdec=1;
-    maxsp=400;
-    // configure acceleration slope
-    kh4_SetSpeedProfile(accinc,accdiv,minspacc, minspdec,maxsp,dsPic ); // Acceleration increment ,  Acceleration divider, Minimum speed acc, Minimum speed dec, maximum speed
+    //kh4_SetMode( kh4RegIdle,dsPic ); // set motors to idle
+
     fclose(xytxt);
     fclose(ustxt);
     kh4_activate_us(0,dsPic); //wyl. ultradzwiekowe
