@@ -246,8 +246,8 @@ void run_goto_heading(float goal_theta) {
         kb_clrscr();
         // Update position and calculate new speeds
         odometria();
-        printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
-        fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
+        printf("Aktualna pozycja robota(skret): x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
+        //fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
         //printf("Czujniki us(skret)\nl90: %4d\nfl45: %4d\nf0: %4d\nfr45: %4d\nr90: %4d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
         // Calculate the current heading error
         diff_theta = goal_theta - result_theta;
@@ -268,12 +268,12 @@ void run_goto_heading(float goal_theta) {
         }
         if ((diff_theta>0) && (diff_theta>0.01))
         {
-            kh4_set_speed(50,-50,dsPic);
+            kh4_set_speed(100,-100,dsPic);
             kh4_SetRGBLeds(0,0,0,0,5,0,0,0,0,dsPic);
         }
         else if ((diff_theta<0) && (diff_theta<-0.01))
         {
-            kh4_set_speed(-50,50,dsPic);
+            kh4_set_speed(-100,100,dsPic);
             kh4_SetRGBLeds(0,5,0,0,0,0,0,0,0,dsPic);
         }
         else{
@@ -282,12 +282,10 @@ void run_goto_heading(float goal_theta) {
         //khepera4_drive_set_speed_differential_bounded(og.configuration.speed_max, 0, 0, diff_theta * 8., 1);
 
     }
-    /*kh4_SetRGBLeds(0,5,0,0,5,0,0,5,0,dsPic);
+    usleep(2000);
+    kh4_SetRGBLeds(0,5,0,0,5,0,0,5,0,dsPic);
     kh4_set_speed(0,0,dsPic);
 
-    usleep(100);
-    */
-    // Stop the motors
 }
 void check_space()
 {
@@ -341,6 +339,7 @@ int test()
     ustxt = fopen(PLIK_US,"w");
     kh4_activate_us(31,dsPic); //wl. ultradzwiekowe
     int i;
+    float f[5];
     int ii,jj;
     int mapka[2][3];
     short max_us=0;
@@ -378,6 +377,8 @@ int test()
 		printf("\n");
 	}
   */
+  int max=2;
+  float kierunek=0;
 	while(!kb_kbhit()){
     kb_clrscr();
     kh4_get_position(&pos_left,&pos_right,dsPic);
@@ -397,10 +398,63 @@ int test()
             usvalues[i]=0;
           }
         }
-        run_goto_heading(0.785398);
-        run_goto_heading(1.570796);
+      for(i=0;i<5;i++){
+        f[i]=0;
+      }
 
+      if (sensors[1]<300){
+        f[0]=f[0]+1;
+      }
+      if (sensors[2]<300){
+        f[1]=f[1]+1;
+      }
+      if (sensors[3]<300){
+        f[2]=f[2]+1+0.5;
+      }
+      if (sensors[4]<300){
+        f[3]=f[3]+1;
+      }
+      if (sensors[5]<300){
+        f[4]=f[4]+1;
+      }
+      float max_f=f[2];
 
+      for(i=0;i<5;i++){
+        if (f[i]>max_f){
+          max_f=f[i];
+          max=i;
+        }
+      }
+printf("Wolne kierunki? %f %f %f %f %f MAX %d\n",f[0],f[1],f[2],f[3],f[4],max);
+
+      if (max==0){
+        kierunek=-1.570796;
+      }
+      else if (max==1){
+        kierunek=-0.785398;
+      }
+      else if (max==2){
+        kierunek = 0;
+      }
+      else if (max==3){
+        kierunek=0.785398;
+      }
+      else if (max==4){
+        kierunek=1.570796;
+      }
+
+      if (sensors[1] > 250 || sensors[2] > 250 || sensors[3] > 250 || sensors[4] > 250 || sensors[5] > 250){
+      run_goto_heading(result_theta+kierunek);
+      /*kh4_SetMode(kh4RegPosition,dsPic);
+      kh4_set_position(pos_left+14745,pos_right+14745,dsPic);
+      usleep(2000000);
+      kh4_SetMode(kh4RegSpeedProfile,dsPic);*/
+      kh4_set_speed(0,0,dsPic);
+    }
+    else {
+      kh4_SetRGBLeds(5,5,0,5,5,0,5,5,0,dsPic);
+      kh4_set_speed(sl,sr,dsPic);
+    }
 /*
     if (usvalues[2]>30 && usvalues[2]<1000)
     {
@@ -440,7 +494,7 @@ int test()
       //sleep(1);
 */
 
-      printf("Czujniki us\nL 90 (0): %4\nFL 45 (1): %d\nF 0(2): %d\nFR 45 (3): %d\nR 90 (4): %d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
+      printf("Czujniki us\nL 90 (0): %d\nFL 45 (1): %d\nF 0(2): %d\nFR 45 (3): %d\nR 90 (4): %d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
       fprintf(ustxt,"%d %d %d %d %d\n",usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
 
       printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
@@ -483,7 +537,7 @@ int test()
         */
 
         printf("\nNacisnij klawisz aby zatrzymac\n");
-        usleep(100);
+        usleep(10000);
     }
     //tcflush(0, TCIFLUSH); // flush input
     kh4_set_speed(0,0,dsPic ); // stop robot
