@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <unistd.h>
-//testgitawcode
+//chybasieudalo
 static knet_dev_t * dsPic; // robot pic microcontroller access
 int maxsp,accinc,accdiv,minspacc, minspdec; // for speed profile
 static int quitReq = 0; // quit variable for loop
