@@ -63,6 +63,7 @@ short usvalues[5];
 int sensors[12];
 float skret;
 float maxus;
+
 int ava_tab[100][100];
 FILE *xytxt;
 FILE *ustxt;
@@ -268,12 +269,12 @@ void run_goto_heading(float goal_theta) {
         }
         if ((diff_theta>0) && (diff_theta>0.01))
         {
-            kh4_set_speed(100,-100,dsPic);
+            kh4_set_speed(100,5,dsPic);
             kh4_SetRGBLeds(0,0,0,0,5,0,0,0,0,dsPic);
         }
         else if ((diff_theta<0) && (diff_theta<-0.01))
         {
-            kh4_set_speed(-100,100,dsPic);
+            kh4_set_speed(5,100,dsPic);
             kh4_SetRGBLeds(0,5,0,0,0,0,0,0,0,dsPic);
         }
         else{
@@ -289,26 +290,18 @@ void run_goto_heading(float goal_theta) {
 }
 void check_space()
 {
-  if (usvalues[2]>50){
-    maxus=usvalues[2];
-  }
-  else if (usvalues[0]>maxus){
-    maxus=usvalues[0];
-    skret=-1.571;
-  }
+  kh4_measure_us(Buffer,dsPic);
+        for (i=0;i<5;i++){
+        	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
+          if(usvalues[i]>MAX_US_DIST){
+            usvalues[i]=0;
+          }
+          else if(usvalues[i]<MIN_US_DIST){
+            usvalues[i]=0;
+          }
+        }
 
-  else if (usvalues[4]>maxus){
-    maxus=usvalues[4];
-    skret=1.571;
-  }
-  /*else if (usvalues[1]>maxus){
-    maxus=usvalues[1];
-    skret=-0.785;
-  }
-  else if (usvalues[3]>maxus){
-    maxus=usvalues[3];
-    skret=0.785;
-  }*/
+
 }
 
 void set_ava()
@@ -345,6 +338,9 @@ int test()
     short max_us=0;
     int maxi=0;
     int poz_l,poz_r;
+    int max_us_meas;
+    int us_heading;
+    float kierunek;
 	kh4_SetSpeedProfile(accinc,accdiv,minspacc, minspdec,maxsp,dsPic ); // Acceleration increment ,  Acceleration divider, Minimum speed acc, Minimum speed dec, maximum speed
 	kh4_SetMode(kh4RegSpeedProfile,dsPic);
 	//inicjalizacja odometrii
@@ -367,6 +363,40 @@ int test()
       ava_tab[ii][jj]=0;
   }
 }
+
+kh4_measure_us(Buffer,dsPic);
+        for (i=0;i<5;i++){
+        	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
+          if(usvalues[i]>MAX_US_DIST){
+            usvalues[i]=0;
+          }
+          else if(usvalues[i]<MIN_US_DIST){
+            usvalues[i]=0;
+          }
+        }
+max_us_meas=usvalues[0];
+us_heading=0;
+if (usvalues[2]>max_us_meas){
+  max_us_meas=usvalues[2];
+  us_heading=2;
+}
+if (usvalues[4]>max_us_meas){
+  max_us_meas=usvalues[4];
+  us_heading=4;
+}
+
+if (us_heading==0){
+  kierunek=-1.570796;
+}
+else if (us_heading==2){
+  kierunek=0;
+}
+else if (us_heading==4){
+  kierunek = 1.570796;
+}
+printf("kierunek %f\n",kierunek);
+run_goto_heading(kierunek);
+sleep(3);
   /*
 	for(ii=0;ii<2;ii++)
 	{
@@ -378,7 +408,7 @@ int test()
 	}
   */
   int max=2;
-  float kierunek=0;
+  
 	while(!kb_kbhit()){
     kb_clrscr();
     kh4_get_position(&pos_left,&pos_right,dsPic);
@@ -401,7 +431,7 @@ int test()
       for(i=0;i<5;i++){
         f[i]=0;
       }
-
+      
       if (sensors[1]<300){
         f[0]=f[0]+1;
       }
