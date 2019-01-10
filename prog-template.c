@@ -237,11 +237,119 @@ void odometry_goto(float goal_x,float goal_y)
         }
         usleep(1000);
 }
+/*
+void odometry_goto_local(float goal_x,float goal_y)
+{
+	       //STEP
+         atgoal=0;
+         veryclosetogoal=0;
+         closetogoal=0;
+	       float dx, dy;
+	       float distance, goalangle, alpha;
+	       float speedfactor;
+	       long speed_left_wish, speed_right_wish;
+	       int atmaxspeed = 0;
 
+
+        while(!kb_kbhit()){
+          kb_clrscr();
+          int atmaxspeed = 0;
+
+	       // Do nothing if we are at goal
+         kh4_SetRGBLeds(5,5,0,5,5,0,5,5,0,dsPic);
+         odometria();
+         printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.4f\n",result_x, result_y, result_theta);
+         fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
+	       if (atgoal != 0)
+	       {
+	    	   kh4_SetRGBLeds(0,5,0,0,5,0,0,5,0,dsPic);
+           kh4_set_speed(0,0,dsPic);
+	    	   break;
+	       }
+	       // Calculate new wish speeds
+	       dx = goal_x - result_x;
+	       dy = goal_y - result_y;
+	       distance = sqrt(dx * dx + dy * dy);
+	       goalangle = atan2(dy, dx);
+	       alpha = goalangle - result_theta;
+	       while (alpha > PI)
+	       {
+	    	   alpha -= 2 * PI;
+	       }
+	       while (alpha < -PI)
+	       {
+	           alpha += 2 * PI;
+	       }
+	       // Calculate the speed factor
+	       speedfactor = (distance + 0.05) * 10. * speed_max;
+	       if (speedfactor > speed_max)
+	       {
+	           speedfactor = speed_max;
+	           atmaxspeed = 1;
+	       }
+	        // Calculate the theoretical speed
+	        //printf("dist %f - goalangle %f - alpha %f \n", distance, goalangle, alpha);
+	        speed_left_wish = speedfactor * (PI - 2 * abs(alpha) + alpha) / PI + 0.5;
+	        speed_right_wish = speedfactor * (PI - 2 * abs(alpha) - alpha) / PI + 0.5;
+	        // Close to termination condition: just stop
+	        if (veryclosetogoal)
+	        {
+	        	speed_left_wish = 0;
+	          speed_right_wish = 0;
+	        }
+	        // Limit acceleration
+	        if (speed_left_wish > speed_left_internal)
+	        {
+	        	speed_left_internal += acceleration_step;
+	        }
+	        if (speed_left_wish < speed_left_internal)
+	        {
+	            speed_left_internal -= acceleration_step;
+	        }
+	        if (speed_right_wish > speed_right_internal)
+	        {
+	            speed_right_internal += acceleration_step;
+	        }
+	        if (speed_right_wish < speed_right_internal)
+	        {
+	            speed_right_internal -= acceleration_step;
+	        }
+	        // Don't set speeds < MIN_SPEED (for accuracy reasons)
+	        r_speed_left = speed_left_internal;
+	        r_speed_right = speed_right_internal;
+	        if (abs(r_speed_left) < speed_min)
+	        {
+	        	r_speed_left = 0;
+	        }
+	        if (abs(r_speed_right) < speed_min)
+	        {
+	            r_speed_right = 0;
+	        }
+	        // Termination condition
+	        if (atmaxspeed == 0)
+	        {
+	            closetogoal = 1;
+	            if ((r_speed_left == 0) || (r_speed_right == 0))
+	            {
+	            	veryclosetogoal = 1;
+	            	   //atgoal = 1;
+	            }
+	            if ((r_speed_left == 0) && (r_speed_right == 0))
+	            {
+	            	atgoal = 1;
+	            }
+	        }
+          kh4_set_speed(r_speed_left,r_speed_right,dsPic);
+
+        }
+        usleep(1000);
+}
+*/
 void run_goto_heading(float goal_theta) {
     float diff_theta;
     float res_theta=0;
     atheading=0;
+
     // Move until we have reached the target position
       while(!kb_kbhit()) {
         kb_clrscr();
@@ -269,12 +377,12 @@ void run_goto_heading(float goal_theta) {
         }
         if ((diff_theta>0) && (diff_theta>0.01))
         {
-            kh4_set_speed(100,5,dsPic);
+            kh4_set_speed(150,0,dsPic);
             kh4_SetRGBLeds(0,0,0,0,5,0,0,0,0,dsPic);
         }
         else if ((diff_theta<0) && (diff_theta<-0.01))
         {
-            kh4_set_speed(5,100,dsPic);
+            kh4_set_speed(0,150,dsPic);
             kh4_SetRGBLeds(0,5,0,0,0,0,0,0,0,dsPic);
         }
         else{
@@ -290,6 +398,7 @@ void run_goto_heading(float goal_theta) {
 }
 void check_space()
 {
+  int i;
   kh4_measure_us(Buffer,dsPic);
         for (i=0;i<5;i++){
         	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
@@ -325,6 +434,25 @@ void check_ava()
   cury = round(result_y * 10);
   cur_y = (int)cury;
 
+}
+
+void go_str(int poz_f)
+{
+  kh4_get_position(&pos_left,&pos_right,dsPic);
+  int pozycjaf;
+  pozycjaf=pos_left+poz_f;
+  while(pozycjaf>pos_left){
+    kh4_get_position(&pos_left,&pos_right,dsPic);
+    kh4_SetRGBLeds(0,0,0,0,0,0,8,0,0,dsPic);
+    kh4_set_speed(50, 50, dsPic);
+    //kh4_SetMode(kh4RegPosition,dsPic);
+   //kh4_set_position(pos_left+14745,pos_right+14745,dsPic);
+    //usleep(2000000);
+    //kh4_SetMode(kh4RegSpeedProfile,dsPic);
+    //kh4_set_speed(0, 0, dsPic);
+    //break;
+  }
+  kh4_set_speed(0, 0, dsPic);
 }
 int test()
 {
@@ -396,7 +524,9 @@ else if (us_heading==4){
 }
 printf("kierunek %f\n",kierunek);
 run_goto_heading(kierunek);
-sleep(3);
+go_str(14745);
+kh4_set_speed(sl, sr, dsPic);
+
   /*
 	for(ii=0;ii<2;ii++)
 	{
@@ -412,7 +542,6 @@ sleep(3);
 	while(!kb_kbhit()){
     kb_clrscr();
     kh4_get_position(&pos_left,&pos_right,dsPic);
-        //kh4_get_position(&poz_l,&poz_r,dsPic);
     odometria();
     kh4_proximity_ir(Buffer, dsPic);
         for (i=0;i<12;i++){
@@ -479,66 +608,18 @@ printf("Wolne kierunki? %f %f %f %f %f MAX %d\n",f[0],f[1],f[2],f[3],f[4],max);
       kh4_set_position(pos_left+14745,pos_right+14745,dsPic);
       usleep(2000000);
       kh4_SetMode(kh4RegSpeedProfile,dsPic);*/
-      kh4_set_speed(0,0,dsPic);
+      //kh4_set_speed(0,0,dsPic);
     }
     else {
       kh4_SetRGBLeds(5,5,0,5,5,0,5,5,0,dsPic);
       kh4_set_speed(sl,sr,dsPic);
     }
-/*
-    if (usvalues[2]>30 && usvalues[2]<1000)
-    {
-        //gotox=result_x+0.1;
-        //gotoy=result_y;
-        //usleep(200000);
-        //kh4_SetMode(kh4RegSpeedProfile,dsPic);
-        r_theta=result_theta;
-
-        //kh4_set_speed(sl,sr,dsPic);
-        kh4_SetRGBLeds(0,0,7,0,0,7,0,5,0,dsPic);
-
-    }
-    else if((usvalues[0]>25 && usvalues[0]<1000)) //|| (usvalues[1]>25 && usvalues[1]<1000) || sensors [3] > 150)
-    {
-        //kh4_SetMode(kh4RegPosition,dsPic);
-        //kh4_set_position(poz_l-10000,poz_r+10000,dsPic);
-        //usleep(200000);
-        //kh4_SetMode(kh4RegSpeedProfile,dsPic);
-        //gotox=result_x;
-        //gotoy=result_y-0.1;
-        r_theta=result_theta-1.571;
-    }
-    else if(usvalues[4]>25 && usvalues[4]<1000 )//|| sensors [3] > 150)
-    {
-        //kh4_SetMode(kh4RegPosition,dsPic);
-        //kh4_set_position(poz_l+10000,poz_r-10000,dsPic);
-        //usleep(200000);
-        //kh4_SetMode(kh4RegSpeedProfile,dsPic);
-        //gotox=result_x;
-        //gotoy=result_y+0.1;
-
-        r_theta=result_theta+1.571;
-    }
-
-      run_goto_heading(r_theta);
-      //sleep(1);
-*/
 
       printf("Czujniki us\nL 90 (0): %d\nFL 45 (1): %d\nF 0(2): %d\nFR 45 (3): %d\nR 90 (4): %d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
       fprintf(ustxt,"%d %d %d %d %d\n",usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
 
       printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
       fprintf(xytxt,"%.4f %.4f %.4f\n", result_x, result_y, result_theta);
-    //kh4_set_speed(sl,sr,dsPic);
-        //while(atgoal==0)
-        //{
-        //odometria();
-        //odometry_goto(gotox,gotoy);
-        //kh4_set_speed(r_speed_left,r_speed_right,dsPic);
-
-        //usleep(20000);
-       // }
-
         /*
         for(i=0;i<5;i++)
         {
