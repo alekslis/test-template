@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <math.h>
 #include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
 //chybasieudalo
 static knet_dev_t * dsPic; // robot pic microcontroller access
 int maxsp,accinc,accdiv,minspacc, minspdec; // for speed profile
@@ -38,6 +41,27 @@ static void ctrlc_handler( int sig )
 #define A_US_2 0
 #define A_US_3 0.785398
 #define A_US_4 1.570796
+#define IR_OBST_TRSH 250
+#define SIZE 10000
+#define HEADING_0 -2.356194
+#define HEADING_1 -1.570796
+#define HEADING_2 -0.785398
+#define HEADING_3 0
+#define HEADING_4 0.785398
+#define HEADING_5 1.570796
+#define HEADING_6 2.356194
+#define HEADING_7 3.141593
+#define CELL_0 -100-1
+#define CELL_1 -1
+#define CELL_2 100-1
+#define CELL_3 100
+#define CELL_4 100+1
+#define CELL_5 1
+#define CELL_6 -100+1
+#define CELL_7 -100
+int hasz_key;
+int current_angle;
+float wish_angle;
 int sl, sr; //predkosci lewego i prawego
 //zmienne do odometrii
 int pos_left_prev;
@@ -73,11 +97,106 @@ float maxus;
 int ava_tab[100][100];
 FILE *xytxt;
 FILE *datatxt;
+struct DataItem {
+   int data;   
+   int key;
+};
 
+struct DataItem* hashArray[SIZE]; 
+struct DataItem* dummyItem;
+struct DataItem* item;
+
+int hashCode(int key) {
+   return key % SIZE;
+}
+
+struct DataItem *search(int key) {
+   //get the hash 
+   int hashIndex = hashCode(key);  
+	
+   //move in array until an empty 
+   while(hashArray[hashIndex] != NULL) {
+	
+      if(hashArray[hashIndex]->key == key)
+         return hashArray[hashIndex]; 
+			
+      //go to next cell
+      ++hashIndex;
+		
+      //wrap around the table
+      hashIndex %= SIZE;
+   }        
+	
+   return NULL;        
+}
+
+void insert(int key,int data) {
+
+   struct DataItem *item = (struct DataItem*) malloc(sizeof(struct DataItem));
+   item->data = data;  
+   item->key = key;
+
+   //get the hash 
+   int hashIndex = hashCode(key);
+
+   //move in array until an empty or deleted cell
+   while(hashArray[hashIndex] != NULL && hashArray[hashIndex]->key != -1) {
+      //go to next cell
+      ++hashIndex;
+		
+      //wrap around the table
+      hashIndex %= SIZE;
+   }
+	
+   hashArray[hashIndex] = item;
+}
+
+struct DataItem* delete(struct DataItem* item) {
+   int key = item->key;
+
+   //get the hash 
+   int hashIndex = hashCode(key);
+
+   //move in array until an empty
+   while(hashArray[hashIndex] != NULL) {
+	
+      if(hashArray[hashIndex]->key == key) {
+         struct DataItem* temp = hashArray[hashIndex]; 
+			
+         //assign a dummy item at deleted position
+         hashArray[hashIndex] = dummyItem; 
+         return temp;
+      }
+		
+      //go to next cell
+      ++hashIndex;
+		
+      //wrap around the table
+      hashIndex %= SIZE;
+   }      
+	
+   return NULL;        
+}
+
+void display() {
+   int i = 0;
+	
+   for(i = 0; i<SIZE; i++) {
+	
+      if(hashArray[i] != NULL)
+         printf(" (%d,%d)",hashArray[i]->key,hashArray[i]->data);
+      else
+         printf(" ~~ ");
+   }
+	
+   printf("\n");
+}
+/**********************************************************************************************
+ * *******************************************************************************************/
 void odometria_init()
 {
 	//Odometria - domyslne dane
-	wheel_distance = 0.10470;
+	wheel_distance = 0.105;
 	wheel_conversion_left = 0.13194 / 19456.0; // perimeter over pulses per rev
 	wheel_conversion_right = 0.13194 / 19456.0;
     acceleration_step = 2.;
@@ -89,8 +208,8 @@ void odometria_init()
     speed_right_internal = 0;
     r_speed_left = 0;
     r_speed_right = 0;
-    result_x = 0;
-    result_y = 0;
+    result_x = 0.1;
+    result_y = 0.1;
     result_theta = 0;
     //timestamp = 0;
 
@@ -103,6 +222,8 @@ void odometria_init()
     del_theta=0;
     atheading=0;
 }
+/**********************************************************************************************
+ * *******************************************************************************************/
 void odometria()
 {
 	long delta_pos_left, delta_pos_right;
@@ -131,7 +252,8 @@ void odometria()
 		pos_left_prev = pos_left;
 		pos_right_prev = pos_right;
 }
-
+/**********************************************************************************************
+ * *******************************************************************************************/
 void odometry_goto(float goal_x,float goal_y)
 {
 	       //STEP
@@ -244,8 +366,8 @@ void odometry_goto(float goal_x,float goal_y)
         }
         usleep(1000);
 }
-
-
+/**********************************************************************************************
+ * *******************************************************************************************/
 void run_goto_heading(float goal_theta) {
     float diff_theta;
     float res_theta=0;
@@ -256,7 +378,7 @@ void run_goto_heading(float goal_theta) {
         kb_clrscr();
         // Update position and calculate new speeds
         odometria();
-        printf("Aktualna pozycja robota(skret): x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
+        //printf("Aktualna pozycja robota(skret): x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
         // Calculate the current heading error
         diff_theta = goal_theta - result_theta;
         while (diff_theta > PI) {
@@ -274,12 +396,12 @@ void run_goto_heading(float goal_theta) {
           kh4_set_speed(0,0,dsPic);
           break;
         }
-        if ((diff_theta>0) && (diff_theta>0.01))
+        if (diff_theta>0 && diff_theta>0.01)
         {
             kh4_set_speed(50,-50,dsPic);
             kh4_SetRGBLeds(0,0,0,0,5,0,0,0,0,dsPic);
         }
-        else if ((diff_theta<0) && (diff_theta<(-0.01))
+        else if (diff_theta<0 && diff_theta<-0.01)
         {
             kh4_set_speed(-50,50,dsPic);
             kh4_SetRGBLeds(0,5,0,0,0,0,0,0,0,dsPic);
@@ -295,62 +417,105 @@ void run_goto_heading(float goal_theta) {
     kh4_set_speed(0,0,dsPic);
 
 }
-void check_space()
-{
-  int i;
-  kh4_measure_us(Buffer,dsPic);
-        for (i=0;i<5;i++){
-        	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
-          if(usvalues[i]>MAX_US_DIST){
-            usvalues[i]=0;
-          }
-          else if(usvalues[i]<MIN_US_DIST){
-            usvalues[i]=0;
-          }
-        }
+/**********************************************************************************************
+ * *******************************************************************************************/
+int check_heading()
+{   
+    //Front
+    if (result_theta>-0.3926 && result_theta<0.3926){current_angle=3;}
+    //Front right
+    if (result_theta>0.3926 && result_theta<1.177998){current_angle=4;}
+    //Right
+    if (result_theta>1.177998 && result_theta<1.963396){current_angle=5;}
+    //Bottom right
+    if (result_theta>1.963396 && result_theta<2.748794){current_angle=6;}
+    //Bottom
+    if (result_theta>2.748794 || result_theta<-2.748794){current_angle=7;}
+    //Front left
+    if (result_theta<-0.3926 && result_theta>-1.177998){current_angle=2;}
+    //Left
+    if (result_theta<-1.177998 && result_theta>-1.963396){current_angle=1;}
+    //Bottom left
+    if (result_theta<-1.963396 && result_theta>-2.748794){current_angle=0;}
+    
+    
+    //CORRECT HEADING ?
 }
-
-void set_ava()
+/**********************************************************************************************
+ * *******************************************************************************************/
+void set_bound()
 {
-  int current_x,current_y;
-  current_x= (int)(round(result_x * 10));
-  current_y= (int)(round(result_y * 10));
-  ava_tab[current_x][current_y]=1;
+    int i;
+    //insert(0,2);
+    for(i=2;i<24;i=i+2)
+    {
+        insert(i*100+22,2);
+        insert(22*100+i,2);
+        insert(i*100,2);
+        insert(i,2);
+    }
+    
 }
-void check_ava()
+/**********************************************************************************************
+ * *******************************************************************************************/
+void check_cell()
 {
-  float curx,cury;
-  int cur_x,cur_y;
-  float g_sensor_angle1=result_theta-1.571;
-  float g_sensor_angle3=result_theta;
-  float g_sensor_angle5=result_theta+1.571;
-  float g_sensor_angle7=result_theta+PI;
-  int current_x,current_y;
-  curx = round(result_x * 10);
-  cur_x = (int)curx;
-  cury = round(result_y * 10);
-  cur_y = (int)cury;
-
+  float res_x;
+  float res_y;
+    res_x=result_x*10.0;
+    res_y=result_y*10.0;
+    res_x=(float)round(res_x);
+    res_y=(float)round(res_y);
+    int ress_x=res_x;
+    int ress_y=res_y;
+    hasz_key=ress_x*100+ress_y; 
+    //printf("ress_x %d,ress_y %d, hasz_key %d, result_x %f, result_y %f\n", ress_x,ress_y,hasz_key,result_x,result_y);
 }
+/**********************************************************************************************
+ * *******************************************************************************************/
+void set_cell_past()
+{
+    check_cell();
+    
+    insert(hasz_key,1);
+    
 
-void go_str(int poz_f)
+   //if(item != NULL) {
+   //   printf("Element found: %d\n", item->data);
+   //} else {
+   //   printf("Element not found\n");
+   //}
+}
+/**********************************************************************************************/
+ void go_str(int poz_f)
 {
   int pozycjaf,i;
   kh4_get_position(&pos_left,&pos_right,dsPic);
-  kh4_proximity_ir(Buffer, dsPic);
-        for (i=0;i<12;i++){
-			       sensors[i]=(Buffer[i*2] | Buffer[i*2+1]<<8);
-        }
+  //kh4_proximity_ir(Buffer, dsPic);
+        //for (i=0;i<12;i++){
+			  //     sensors[i]=(Buffer[i*2] | Buffer[i*2+1]<<8);
+        //}
   pozycjaf=pos_left+poz_f;
-  while(!kb_kbhit() || pozycjaf>=pos_left){
+  while(!kb_kbhit()){
+        //kb_clrscr();
+        if (pozycjaf>pos_left)
+        {
+          kh4_set_speed(0, 0, dsPic);
+          break;
+        }
+        /*
+        //odometria();
+        //printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
         kh4_proximity_ir(Buffer, dsPic);
         for (i=0;i<12;i++){
 			       sensors[i]=(Buffer[i*2] | Buffer[i*2+1]<<8);
         }
+        
+        //printf("current angle %d  hasz key %d \n",current_angle, hasz_key);
     if (sensors[3]>250 || sensors[4]>250 || sensors[2]>250){
       kh4_set_speed(0, 0, dsPic);
       break;
-    }
+    }*/
     kh4_get_position(&pos_left,&pos_right,dsPic);
     kh4_SetRGBLeds(0,0,0,0,0,0,8,0,0,dsPic);
     kh4_set_speed(sl, sr, dsPic);
@@ -360,9 +525,339 @@ void go_str(int poz_f)
     //kh4_SetMode(kh4RegSpeedProfile,dsPic);
     //kh4_set_speed(0, 0, dsPic);
     //break;
+    usleep(1000);
   }
   kh4_set_speed(0, 0, dsPic);
 }
+
+void check_cell_ava()
+{
+    //float resu_x,resu_y;
+    float avoidpastangle;
+    
+    check_cell();
+    int cellc,cell0,cell1,cell2,cell3,cell4,cell5,cell6,cell7;
+    int keyc;
+    //CELLC
+    item = search(hasz_key);
+   
+      if(item != NULL) {
+      //printf("Element found: %d\n", item->data);
+      cellc=item->data;
+      } else {
+        cellc=0;
+      //printf("CELLC NULL\n");
+      }
+      
+    //CELL3
+    item = search(hasz_key+100);
+      if(item != NULL) {
+      //printf("Element found: %d\n", item->data);
+      cell3=item->data;
+      
+      } else {
+      cell3=0;
+      //printf("CELL0 NULL\n");
+      }
+      printf("Cell3 %d\n", cell3);
+    
+    //CELL4
+    item = search(hasz_key+CELL_4);
+      if(item != NULL) {
+      //printf("Element found: %d\n", item->data);
+      cell4=item->data;
+      } else {
+      cell4=0;
+      //printf("CELL1 NULL\n");
+      }
+      printf("Cell4 %d\n", cell4);
+     
+    //CELL2
+      item = search(hasz_key+CELL_2);
+      if(item != NULL) {
+      //printf("Element found: %d\n", item->data);
+      cell2=item->data;
+      } else {
+      cell2=0;
+      //printf("CELL0 NULL\n");
+      }
+      printf("Cell2 %d\n", cell2);
+
+    if (cell3==0)
+    {
+      //kh4_set_speed(50,50,dsPic);
+        go_str(14745);
+        set_cell_past();
+    }
+    else if (cell3!=0)
+    {
+      if(cell4==0)
+      {
+        run_goto_heading(R_45);
+      }
+      else if(cell2==0)
+      {
+        run_goto_heading(-R_45);
+      }
+      else 
+      {
+        run_goto_heading(PI);
+      }
+    }
+    printf("hasz_key %d, result_x %f, result_y %f\n",hasz_key,result_x,result_y);
+     /*
+      //CELL3
+      item = search(hasz_key+CELL_3);
+      if(item != NULL) {
+      printf("Element found: %d\n", item->data);
+      cell3=item->data;
+      } else {
+      cell3=0;
+      printf("CELL0 NULL\n");
+      }
+      //CELL4
+      item = search(hasz_key+CELL_4);
+      if(item != NULL) {
+      printf("Element found: %d\n", item->data);
+      cell4=item->data;
+      } else {
+      cell4=0;
+      printf("CELL0 NULL\n");
+      }
+      //CELL5
+      item = search(hasz_key+CELL_5);
+      if(item != NULL) {
+      printf("Element found: %d\n", item->data);
+      cell5=item->data;
+      } else {
+      cell5=0;
+      printf("CELL0 NULL\n");
+      }
+      //CELL6
+      item = search(hasz_key+CELL_6);
+      if(item != NULL) {
+      printf("Element found: %d\n", item->data);
+      cell6=item->data;
+      } else {
+      cell6=0;
+      printf("CELL0 NULL\n");
+      }
+      //CELL7
+      item = search(hasz_key+CELL_7);
+      if(item != NULL) {
+      printf("Element found: %d\n", item->data);
+      cell7=item->data;
+      } else {
+      cell7=0;
+      printf("CELL0 NULL\n");
+      }
+    */   
+
+    check_heading();
+    
+
+
+
+    /*switch (current_angle) {
+    
+    case 3:
+        item = search(hasz_key+CELL_3);
+        if(item == NULL) {
+            avoidpastangle=HEADING_3;
+        }
+        else if (item!=NULL) {
+            item = search(hasz_key+CELL_4);  
+            if(item == NULL) {
+                avoidpastangle=HEADING_4;
+            }
+        }
+        else if (item!=NULL) {   
+            item = search(hasz_key+CELL_2);
+            if(item == NULL) {
+                avoidpastangle=HEADING_2;
+            }
+        }
+        else {        
+            avoidpastangle=-result_theta;
+            }
+
+        break;
+
+    case 4:
+        item = search(hasz_key+CELL_4);
+        if(item == NULL) {
+            avoidpastangle=HEADING_4;
+        }
+        else if (item!=NULL){
+            item = search(hasz_key+CELL_5);  
+            if(item == NULL) {
+                avoidpastangle=HEADING_5;
+            }
+        }
+        else if (item!=NULL) {   
+            item = search(hasz_key+CELL_3);
+            if(item == NULL) {
+                avoidpastangle=HEADING_3;
+            }
+        }
+        else {        
+            avoidpastangle=-result_theta;
+            }
+     break;
+     
+    case 5:
+        item = search(hasz_key+CELL_5);
+        if(item == NULL) {
+            avoidpastangle=HEADING_5;
+        }
+        else if (item!=NULL){
+            item = search(hasz_key+CELL_6);  
+            if(item == NULL) {
+                avoidpastangle=HEADING_6;
+            }
+        }
+        else if (item!=NULL){   
+            item = search(hasz_key+CELL_4);
+            if(item == NULL) {
+                avoidpastangle=HEADING_4;
+            }
+        }
+        else {        
+            avoidpastangle=-result_theta;
+            }
+     break;
+     
+    case 6:
+        item = search(hasz_key+CELL_6);
+        if(item == NULL) {
+            avoidpastangle=HEADING_6;
+        }
+        else if(item!=NULL) {
+            item = search(hasz_key+CELL_7);  
+            if(item == NULL) {
+                avoidpastangle=HEADING_7;
+            }
+        }
+        else if(item!=NULL) {   
+            item = search(hasz_key+CELL_5);
+            if(item == NULL) {
+                avoidpastangle=HEADING_5;
+            }
+        }
+        else {        
+            avoidpastangle=-result_theta;
+            }
+     break;
+     
+    case 7:
+        item = search(hasz_key+CELL_7);
+        if(item == NULL) {
+            avoidpastangle=HEADING_7;
+        }
+        else if(item!=NULL) {
+            item = search(hasz_key+CELL_6);  
+            if(item == NULL) {
+                avoidpastangle=HEADING_6;
+            }
+        }
+        else if(item!=NULL) {   
+            item = search(hasz_key+CELL_0);
+            if(item == NULL) {
+                avoidpastangle=HEADING_0;
+            }
+        }
+        else {        
+            avoidpastangle=-result_theta;
+            }
+     break;
+     
+    case 2:
+        item = search(hasz_key+CELL_2);
+        if(item == NULL) {
+            avoidpastangle=HEADING_2;
+        }
+        else if (item!=NULL){
+            item = search(hasz_key+CELL_3);  
+            if(item == NULL) {
+                avoidpastangle=HEADING_3;
+            }
+        }
+        else if(item!=NULL) {   
+            item = search(hasz_key+CELL_1);
+            if(item == NULL) {
+                avoidpastangle=HEADING_1;
+            }
+        }
+        else {        
+            avoidpastangle=-result_theta;
+            }
+     break;
+     
+    case 1:
+        item = search(hasz_key+CELL_1);
+        if(item == NULL) {
+            avoidpastangle=HEADING_1;
+        }
+        else if(item!=NULL) {
+            item = search(hasz_key+CELL_2);  
+            if(item == NULL) {
+                avoidpastangle=HEADING_2;
+            }
+        }
+        else if(item!=NULL) {   
+            item = search(hasz_key+CELL_0);
+            if(item == NULL) {
+                avoidpastangle=HEADING_0;
+            }
+        }
+        else {        
+            avoidpastangle=-result_theta;
+            }
+     break;
+    case 0:
+                item = search(hasz_key+CELL_0);
+        if(item == NULL) {
+            avoidpastangle=HEADING_0;
+        }
+        else if(item!=NULL) {
+            item = search(hasz_key+CELL_7);  
+            if(item == NULL) {
+                avoidpastangle=HEADING_7;
+            }
+        }
+        else if (item!=NULL){   
+            item = search(hasz_key+CELL_1);
+            if(item == NULL) {
+                avoidpastangle=HEADING_1;
+            }
+        }
+        else {        
+            avoidpastangle=-result_theta;
+            }
+     break;
+   //default: instrukcje, jeśli żaden z wcześniejszych warunków nie został spełniony 
+  //break;
+ 
+ }*/
+ wish_angle=avoidpastangle+result_theta;
+}
+
+/**********************************************************************************************
+ * *******************************************************************************************/
+
+
+/**********************************************************************************************
+ * *******************************************************************************************/
+
+
+/**********************************************************************************************
+ * *******************************************************************************************/
+
+
+
+
+/**********************************************************************************************
+ * *******************************************************************************************/
 int test()
 {
     //xytxt = fopen(PLIK_XY,"w");
@@ -379,15 +874,15 @@ int test()
 	kh4_SetMode(kh4RegSpeedProfile,dsPic);
 	//inicjalizacja odometrii
 	kh4_get_position(&pos_left,&pos_right,dsPic);
-
+  set_bound();
     odometria_init();
     printf("Predkosci kol\n");
     printf("Lewe:");
     scanf("%d", &sl);
     printf("Prawe:");
     scanf("%d", &sr);
-    kh4_set_speed(sl, sr, dsPic);
-    for(ii=0;ii<2;ii++){
+    kh4_set_speed(0, 0, dsPic);
+   /* for(ii=0;ii<2;ii++){
 		    for(jj=0;jj<3;jj++){
           mapka[ii][jj]=0;
 		}
@@ -396,8 +891,7 @@ int test()
     for(jj=0;jj<100;jj++){
       ava_tab[ii][jj]=0;
   }
-}
-
+}*/
 kh4_measure_us(Buffer,dsPic);
         for (i=0;i<5;i++){
         	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
@@ -408,46 +902,13 @@ kh4_measure_us(Buffer,dsPic);
             usvalues[i]=0;
           }
         }
-//us_heading=A_US_2;
-if (usvalues[2]>25)
-{
-  kierunek=A_US_2;
-}
-else if (usvalues[0]<usvalues[4] && usvalues[0]>24){
-  kierunek=A_US_0;
-  //us_heading=A_US_0;
-}
-else if (usvalues[0]>usvalues[4] && usvalues[4]>24){
-  kierunek=A_US_4;
-}
-else {
-  kierunek=3.14;
-}
-/*
-if (us_heading==0){
-  kierunek=-1.570796;
-}
-else if (us_heading==2){
-  kierunek=0;
-}
-else if (us_heading==4){
-  kierunek = 1.570796;
-}
-*/
-run_goto_heading(result_theta + kierunek);
-go_str(14745);
-kh4_set_speed(0, 0, dsPic);
+//set_cell_past();
+//check_cell_ava();
 
-  /*
-	for(ii=0;ii<2;ii++)
-	{
-		for(jj=0;jj<3;jj++)
-		{
-			printf("%d  ",mapka[ii][jj]);
-		}
-		printf("\n");
-	}
-  */
+//run_goto_heading(result_theta + kierunek);
+//go_str(14745);
+//kh4_set_speed(0, 0, dsPic);
+insert(801,1);
 	while(!kb_kbhit()){
     kb_clrscr();
     printf("\nNacisnij klawisz aby zatrzymac\n");
@@ -467,6 +928,13 @@ kh4_set_speed(0, 0, dsPic);
             usvalues[i]=0;
           }
         }
+    
+    check_cell_ava();
+    
+    //run_goto_heading(wish_angle);
+    //go_str(14745);
+    //sleep(2);
+    /*    
     if (usvalues[2]>25)
     {
       kierunek=A_US_2;
@@ -483,40 +951,13 @@ kh4_set_speed(0, 0, dsPic);
     run_goto_heading(kierunek);
     go_str(14745);
     kh4_set_speed(0, 0, dsPic);
-      
+    */  
 
     printf("Czujniki us\nL 90 (0): %d\nFL 45 (1): %d\nF 0(2): %d\nFR 45 (3): %d\nR 90 (4): %d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
     fprintf(datatxt,"%.4f %.4f %.4f %d %d %d %d %d\n",result_x, result_y, result_theta, usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
     printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
-        /*
-        for(i=0;i<5;i++)
-        {
-        	if (i==0) { ii=1; jj=0;}
-        	else if (i==1) {ii=0; jj=0;}
-        	else if (i==2) {ii=0; jj=1;}
-        	else if (i==3) {ii=0; jj=2;}
-        	else if (i==4) {ii=1; jj=2;}
 
-        	if (usvalues[i]>25)
-        	{
-        		mapka[ii][jj]=usvalues[i];
-        	}
-        	else{
-        		mapka[ii][jj]=0;
-        	}
-        }
-        for(ii=0;ii<2;ii++)
-        {
-        	for(jj=0;jj<3;jj++)
-        	{
-        		printf("%d    ",mapka[ii][jj]);
-        	}
-        	printf("\n");
-        }
-        */
-
-        
-        usleep(10000);
+    usleep(10000);
     }
     //tcflush(0, TCIFLUSH); // flush input
     kh4_set_speed(0,0,dsPic ); // stop robot
@@ -535,6 +976,9 @@ int main(int argc, char * argv[])
   char revision,version;
   int kp,ki,kd;
   int pmarg;
+    dummyItem = (struct DataItem*) malloc(sizeof(struct DataItem));
+    dummyItem->data = -1;  
+    dummyItem->key = -1;
 // initiate libkhepera and robot access
  if ( kh4_init(argc ,argv)!=0)
  {
