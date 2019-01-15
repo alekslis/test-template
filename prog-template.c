@@ -35,6 +35,8 @@ static void ctrlc_handler( int sig )
 #define PLIK_XY "pozycjaxy.txt"
 #define PLIK_US "data.txt"
 #define MAX_US_DIST 250 //maksymalny zasieg US
+#define MAX_US_DIST2 100//ZASIEG 1 M
+#define MAX_US_INT 10
 #define MIN_US_DIST 25 //minimalny zasieg US
 #define A_US_0 -1.570796
 #define A_US_1 -0.785398
@@ -84,6 +86,7 @@ int r_speed_right;
 int closetogoal;
 int veryclosetogoal;
 int atgoal;
+float golx,goly;
 float r_theta;
 float cel_kat;
 float del_theta;
@@ -93,8 +96,15 @@ short usvalues[5];
 int sensors[12];
 float skret;
 float maxus;
-
+int map[22][22];
+int cur_x,cur_y;
+float avoid_past_theta;
+float dist,goaltheta;
+float correct_angle;
+float check_space_angle;
 int ava_tab[100][100];
+int mapx[8];
+int mapy[8];
 FILE *xytxt;
 FILE *datatxt;
 struct DataItem {
@@ -106,91 +116,32 @@ struct DataItem* hashArray[SIZE];
 struct DataItem* dummyItem;
 struct DataItem* item;
 
-int hashCode(int key) {
-   return key % SIZE;
+/**********************************************************************************************
+ *********************************************************************************************/
+void create_map()
+ {
+   int j,i;
+   
+    for (j=0;j<22;j++)
+    {
+        for(i=0;i<22;i++)
+        {
+            map[j][i]=0;
+        }
+    }
+    for (j=0;j<22;j++)
+    {
+        map[j][0]=2;
+        map[j][21]=2;
+    }
+    
+    for (i=0;i<22;i++)
+    {
+        map[0][i]=2;
+        map[21][i]=2;
+    }
 }
 
-struct DataItem *search(int key) {
-   //get the hash 
-   int hashIndex = hashCode(key);  
-	
-   //move in array until an empty 
-   while(hashArray[hashIndex] != NULL) {
-	
-      if(hashArray[hashIndex]->key == key)
-         return hashArray[hashIndex]; 
-			
-      //go to next cell
-      ++hashIndex;
-		
-      //wrap around the table
-      hashIndex %= SIZE;
-   }        
-	
-   return NULL;        
-}
-
-void insert(int key,int data) {
-
-   struct DataItem *item = (struct DataItem*) malloc(sizeof(struct DataItem));
-   item->data = data;  
-   item->key = key;
-
-   //get the hash 
-   int hashIndex = hashCode(key);
-
-   //move in array until an empty or deleted cell
-   while(hashArray[hashIndex] != NULL && hashArray[hashIndex]->key != -1) {
-      //go to next cell
-      ++hashIndex;
-		
-      //wrap around the table
-      hashIndex %= SIZE;
-   }
-	
-   hashArray[hashIndex] = item;
-}
-
-struct DataItem* delete(struct DataItem* item) {
-   int key = item->key;
-
-   //get the hash 
-   int hashIndex = hashCode(key);
-
-   //move in array until an empty
-   while(hashArray[hashIndex] != NULL) {
-	
-      if(hashArray[hashIndex]->key == key) {
-         struct DataItem* temp = hashArray[hashIndex]; 
-			
-         //assign a dummy item at deleted position
-         hashArray[hashIndex] = dummyItem; 
-         return temp;
-      }
-		
-      //go to next cell
-      ++hashIndex;
-		
-      //wrap around the table
-      hashIndex %= SIZE;
-   }      
-	
-   return NULL;        
-}
-
-void display() {
-   int i = 0;
-	
-   for(i = 0; i<SIZE; i++) {
-	
-      if(hashArray[i] != NULL)
-         printf(" (%d,%d)",hashArray[i]->key,hashArray[i]->data);
-      else
-         printf(" ~~ ");
-   }
-	
-   printf("\n");
-}
 /**********************************************************************************************
  * *******************************************************************************************/
 void odometria_init()
@@ -252,6 +203,459 @@ void odometria()
 		pos_left_prev = pos_left;
 		pos_right_prev = pos_right;
 }
+/**********************************************************************************************
+ *********************************************************************************************/
+void check_curr_point()
+{
+    float res_x;
+    float res_y;
+    res_x=result_x*10.0;
+    res_y=result_y*10.0;
+    res_x=(float)round(res_x);
+    res_y=(float)round(res_y);
+    int ress_x=res_x;
+    int ress_y=res_y;
+    cur_x=ress_x;
+    cur_y=ress_y;
+    mapx[0]=cur_x-1;
+    mapy[0]=cur_y-1;
+    mapx[1]=cur_x;
+    mapy[1]=cur_y-1;
+    mapx[2]=cur_x+1;
+    mapy[2]=cur_y-1;
+    mapx[3]=cur_x+1;
+    mapy[3]=cur_y;
+    mapx[4]=cur_x+1;
+    mapy[4]=cur_y+1;
+    mapx[5]=cur_x;
+    mapy[5]=cur_y+1;
+    mapx[6]=cur_x-1;
+    mapy[6]=cur_y+1;
+    mapx[7]=cur_x-1;
+    mapy[7]=cur_y;
+
+}
+/**********************************************************************************************
+ *********************************************************************************************/
+void set_current_point()
+{
+    map[cur_x][cur_y]=1;
+    
+}
+/**********************************************************************************************
+ *********************************************************************************************/
+void update_map()
+{
+    int i,j;
+    kh4_measure_us(Buffer,dsPic);
+        for (i=0;i<5;i++){
+        	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
+          if(usvalues[i]>MAX_US_DIST2){
+            usvalues[i]=0;
+          }
+          else if(usvalues[i]<MIN_US_DIST){
+            usvalues[i]=0;
+          }
+    }
+    usleep(100000);
+    double us_value[5];
+    int us_values[5];
+    for (i=0;i<5;i++){
+        us_value[i] = usvalues[i]/10.0;
+        us_value[i] = floor(us_value[i]);
+        us_values[i] = us_value[i];
+    }
+    int map0x=cur_x-1;
+    int map0y=cur_y-1;
+    int usx,usy;
+    usx=
+    usy=
+    map[cur_x+us_values[2]][cur_y]=us_values[2];   //front
+    map[cur_x+us_values[1]-1][cur_y-us_values[1]-1]=us_values[1];   //front left
+    map[cur_x+us_values[3]-1][cur_y+us_values[3]-1]=us_values[3];   //front right
+    map[cur_x][cur_y-us_values[0]]=us_values[0];   //left
+    map[cur_x][cur_y+us_values[4]]=us_values[4];   //right/
+
+
+    if (current_angle==0){
+        kier_f=map[cur_x-1][cur_y-1];
+        kier_l=map[cur_x-1][cur_y];
+        kier_r=map[cur_x][cur_y-1];
+        
+        if(kier_f==0){
+            avoid_past_theta=-2.356194;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=3.141593;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=-1.570796;
+        }
+        else {avoid_past_theta=0.785398;}
+    }
+    //kierunek -90
+    else if (current_angle==1){
+        kier_f=map[cur_x][cur_y-1];
+        kier_l=map[cur_x-1][cur_y-1];
+        kier_r=map[cur_x+1][cur_y-1];
+        
+        if(kier_f==0){
+            avoid_past_theta=-1.570796;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=-2.356194;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=-0.785398;
+        }
+        else {avoid_past_theta=1.570796;}
+    }
+    //kierunek -45
+    else if (current_angle==2){
+        kier_f=map[cur_x+1][cur_y-1];
+        kier_l=map[cur_x][cur_y-1];
+        kier_r=map[cur_x+1][cur_y];
+        
+        if(kier_f==0){
+            avoid_past_theta=-0.785398;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=-1.570796;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=0;
+        }
+        else {avoid_past_theta=2.356194;}
+    }
+    //kierunek 0
+    else if (current_angle==3){
+        kier_f=map[cur_x+1][cur_y];
+        kier_l=map[cur_x+1][cur_y-1];
+        kier_r=map[cur_x+1][cur_y+1];
+        
+        if(kier_f==0){
+            avoid_past_theta=0;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=-0.785398;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=0.785398;
+        }
+        else {avoid_past_theta=PI;}
+    }
+    //kierunek 45
+    else if (current_angle==4){
+        kier_f=map[cur_x+1][cur_y+1];
+        kier_l=map[cur_x+1][cur_y];
+        kier_r=map[cur_x][cur_y+1];
+        
+        if(kier_f==0){
+            avoid_past_theta=0.785398;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=0;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=1.570796;
+        }
+        else {avoid_past_theta=PI;}
+    }
+    //kierunek 90
+    else if (current_angle==5){
+        kier_f=map[cur_x][cur_y+1];
+        kier_l=map[cur_x+1][cur_y+1];
+        kier_r=map[cur_x-1][cur_y+1];
+        
+        if(kier_f==0){
+            avoid_past_theta=1.570796;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=0.785398;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=2.356194;
+        }
+        else {avoid_past_theta=-1.570796;}
+    }
+    //kierunek 135
+    else if (current_angle==6){
+        kier_f=map[cur_x-1][cur_y+1];
+        kier_l=map[cur_x][cur_y+1];
+        kier_r=map[cur_x-1][cur_y];
+        
+        if(kier_f==0){
+            avoid_past_theta=2.356194;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=1.570796;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=PI;
+        }
+        else {avoid_past_theta=0.785398;}
+    }
+    //kierunek 180
+    else if (current_angle==7){
+        kier_f=map[cur_x-1][cur_y];
+        kier_l=map[cur_x-1][cur_y+1];
+        kier_r=map[cur_x-1][cur_y-1];
+        
+        if(kier_f==0){
+            avoid_past_theta=PI;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=2.356194;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=-2.356194;
+        }
+        else {avoid_past_theta=0.785398;}
+    }
+    else {avoid_past_theta=666666;}
+}
+/**********************************************************************************************
+ *********************************************************************************************/
+void check_heading()
+{   
+    odometria();
+    //Front
+    if (result_theta>-0.3926 && result_theta<0.3926){
+        current_angle=3;
+        correct_angle=0;
+    }
+    //Front right
+    else if (result_theta>0.3926 && result_theta<1.177998){
+        current_angle=4;
+        correct_angle=0.785398;
+        }
+    //Right
+    else if (result_theta>1.177998 && result_theta<1.963396){
+        current_angle=5;
+        correct_angle=1.570796;
+        }
+    //Bottom right
+    else if (result_theta>1.963396 && result_theta<2.748794){
+        current_angle=6;
+        correct_angle=2.356194;
+        }
+    //Bottom
+    
+    else if (result_theta>2.748794 && result_theta<=3.141593){
+        current_angle=7;
+        correct_angle=3.141593;
+        }
+    else if (result_theta<-2.748794 && result_theta>=-3.141593){
+        current_angle=7;
+        correct_angle=3.141593;
+        }
+    
+    //Front left
+    else if (result_theta<-0.3926 && result_theta>-1.177998){
+        current_angle=2;
+        correct_angle=-0.785398;
+    }
+    //Left
+    else if (result_theta<-1.177998 && result_theta>-1.963396){
+        current_angle=1;
+        correct_angle=-1.570796;
+        }
+    //Bottom left
+    else if (result_theta<-1.963396 && result_theta>-2.748794){
+        current_angle=0;
+        correct_angle=-2.356194;
+        }
+    else {current_angle=666;}
+ //CORRECT HEADING ?
+}
+/**********************************************************************************************
+ *********************************************************************************************/
+void check_past_points()
+{   int kier_f,kier_l,kier_r;
+    check_heading();
+    //kierunek -135
+    if (current_angle==0){
+        kier_f=map[cur_x-1][cur_y-1];
+        kier_l=map[cur_x-1][cur_y];
+        kier_r=map[cur_x][cur_y-1];
+        
+        if(kier_f==0){
+            avoid_past_theta=-2.356194;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=3.141593;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=-1.570796;
+        }
+        else {avoid_past_theta=0.785398;}
+    }
+    //kierunek -90
+    else if (current_angle==1){
+        kier_f=map[cur_x][cur_y-1];
+        kier_l=map[cur_x-1][cur_y-1];
+        kier_r=map[cur_x+1][cur_y-1];
+        
+        if(kier_f==0){
+            avoid_past_theta=-1.570796;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=-2.356194;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=-0.785398;
+        }
+        else {avoid_past_theta=1.570796;}
+    }
+    //kierunek -45
+    else if (current_angle==2){
+        kier_f=map[cur_x+1][cur_y-1];
+        kier_l=map[cur_x][cur_y-1];
+        kier_r=map[cur_x+1][cur_y];
+        
+        if(kier_f==0){
+            avoid_past_theta=-0.785398;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=-1.570796;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=0;
+        }
+        else {avoid_past_theta=2.356194;}
+    }
+    //kierunek 0
+    else if (current_angle==3){
+        kier_f=map[cur_x+1][cur_y];
+        kier_l=map[cur_x+1][cur_y-1];
+        kier_r=map[cur_x+1][cur_y+1];
+        
+        if(kier_f==0){
+            avoid_past_theta=0;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=-0.785398;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=0.785398;
+        }
+        else {avoid_past_theta=PI;}
+    }
+    //kierunek 45
+    else if (current_angle==4){
+        kier_f=map[cur_x+1][cur_y+1];
+        kier_l=map[cur_x+1][cur_y];
+        kier_r=map[cur_x][cur_y+1];
+        
+        if(kier_f==0){
+            avoid_past_theta=0.785398;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=0;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=1.570796;
+        }
+        else {avoid_past_theta=PI;}
+    }
+    //kierunek 90
+    else if (current_angle==5){
+        kier_f=map[cur_x][cur_y+1];
+        kier_l=map[cur_x+1][cur_y+1];
+        kier_r=map[cur_x-1][cur_y+1];
+        
+        if(kier_f==0){
+            avoid_past_theta=1.570796;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=0.785398;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=2.356194;
+        }
+        else {avoid_past_theta=-1.570796;}
+    }
+    //kierunek 135
+    else if (current_angle==6){
+        kier_f=map[cur_x-1][cur_y+1];
+        kier_l=map[cur_x][cur_y+1];
+        kier_r=map[cur_x-1][cur_y];
+        
+        if(kier_f==0){
+            avoid_past_theta=2.356194;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=1.570796;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=PI;
+        }
+        else {avoid_past_theta=0.785398;}
+    }
+    //kierunek 180
+    else if (current_angle==7){
+        kier_f=map[cur_x-1][cur_y];
+        kier_l=map[cur_x-1][cur_y+1];
+        kier_r=map[cur_x-1][cur_y-1];
+        
+        if(kier_f==0){
+            avoid_past_theta=PI;
+        }
+        else if (kier_l==0){
+            avoid_past_theta=2.356194;
+        }
+        else if (kier_r==0){
+            avoid_past_theta=-2.356194;
+        }
+        else {avoid_past_theta=0.785398;}
+    }
+    else {avoid_past_theta=666666;}
+}
+/**********************************************************************************************
+ *********************************************************************************************/
+void check_space()
+{
+    int i;
+    kh4_measure_us(Buffer,dsPic);
+        for (i=0;i<5;i++){
+        	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
+          if(usvalues[i]>MAX_US_DIST){
+            usvalues[i]=0;
+          }
+          else if(usvalues[i]<MIN_US_DIST){
+            usvalues[i]=0;
+          }
+        }
+    //check_heading();
+    if (usvalues[2] > 30){check_space_angle=correct_angle;}
+    else if (usvalues[1] > 30){check_space_angle=correct_angle-R_45;}
+    else if (usvalues[3] > 30){check_space_angle=correct_angle+R_45;}
+    else if (usvalues[0] > 30){check_space_angle=correct_angle-R_90;}
+    else if (usvalues[4] > 30){check_space_angle=correct_angle+R_90;}
+    else {check_space_angle=correct_angle+PI;}
+}
+void go_front(int pozycja)
+{
+    kh4_set_speed(0,0,dsPic);
+    kh4_get_position(&pos_left,&pos_right,dsPic);
+    int poz_docel;
+    poz_docel=pos_left+pozycja;
+    while(!kb_kbhit())
+    {
+        kh4_get_position(&pos_left,&pos_right,dsPic);
+        if(pos_left>=poz_docel)
+        {
+           kh4_set_speed (0,0,dsPic);
+           break;
+        }
+        kh4_set_speed (50,50,dsPic);
+        usleep(200);
+    }
+}
+
+/**********************************************************************************************
+ *********************************************************************************************/
+
 /**********************************************************************************************
  * *******************************************************************************************/
 void odometry_goto(float goal_x,float goal_y)
@@ -368,6 +772,25 @@ void odometry_goto(float goal_x,float goal_y)
 }
 /**********************************************************************************************
  * *******************************************************************************************/
+
+void show_goal_param(float goalx,float goaly)
+{
+    float dx, dy;
+	float distance, goalangle, alpha;
+    dx = goalx - result_x;
+	dy = goaly - result_y;
+	distance = sqrt(dx * dx + dy * dy);
+	goalangle = atan2(dy, dx);
+    dist=distance;
+    goaltheta=goalangle;
+}
+void go_to_dist()
+{
+    odometria();
+    show_goal_param(golx,goly);
+    
+
+}
 void run_goto_heading(float goal_theta) {
     float diff_theta;
     float res_theta=0;
@@ -375,7 +798,7 @@ void run_goto_heading(float goal_theta) {
 
     // Move until we have reached the target position
       while(!kb_kbhit()) {
-        kb_clrscr();
+        //kb_clrscr();
         // Update position and calculate new speeds
         odometria();
         //printf("Aktualna pozycja robota(skret): x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
@@ -419,73 +842,17 @@ void run_goto_heading(float goal_theta) {
 }
 /**********************************************************************************************
  * *******************************************************************************************/
-int check_heading()
-{   
-    //Front
-    if (result_theta>-0.3926 && result_theta<0.3926){current_angle=3;}
-    //Front right
-    if (result_theta>0.3926 && result_theta<1.177998){current_angle=4;}
-    //Right
-    if (result_theta>1.177998 && result_theta<1.963396){current_angle=5;}
-    //Bottom right
-    if (result_theta>1.963396 && result_theta<2.748794){current_angle=6;}
-    //Bottom
-    if (result_theta>2.748794 || result_theta<-2.748794){current_angle=7;}
-    //Front left
-    if (result_theta<-0.3926 && result_theta>-1.177998){current_angle=2;}
-    //Left
-    if (result_theta<-1.177998 && result_theta>-1.963396){current_angle=1;}
-    //Bottom left
-    if (result_theta<-1.963396 && result_theta>-2.748794){current_angle=0;}
-    
-    
-    //CORRECT HEADING ?
-}
-/**********************************************************************************************
- * *******************************************************************************************/
-void set_bound()
-{
-    int i;
-    //insert(0,2);
-    for(i=2;i<24;i=i+2)
-    {
-        insert(i*100+22,2);
-        insert(22*100+i,2);
-        insert(i*100,2);
-        insert(i,2);
-    }
-    
-}
-/**********************************************************************************************
- * *******************************************************************************************/
-void check_cell()
-{
-  float res_x;
-  float res_y;
-    res_x=result_x*10.0;
-    res_y=result_y*10.0;
-    res_x=(float)round(res_x);
-    res_y=(float)round(res_y);
-    int ress_x=res_x;
-    int ress_y=res_y;
-    hasz_key=ress_x*100+ress_y; 
-    //printf("ress_x %d,ress_y %d, hasz_key %d, result_x %f, result_y %f\n", ress_x,ress_y,hasz_key,result_x,result_y);
-}
-/**********************************************************************************************
- * *******************************************************************************************/
-void set_cell_past()
-{
-    check_cell();
-    
-    insert(hasz_key,1);
-    
 
-   //if(item != NULL) {
-   //   printf("Element found: %d\n", item->data);
-   //} else {
-   //   printf("Element not found\n");
-   //}
-}
+/**********************************************************************************************
+ * *******************************************************************************************/
+ 
+
+/**********************************************************************************************
+ * *******************************************************************************************/
+
+/**********************************************************************************************
+ * *******************************************************************************************/
+
 /**********************************************************************************************/
  void go_str(int poz_f)
 {
@@ -503,19 +870,6 @@ void set_cell_past()
           kh4_set_speed(0, 0, dsPic);
           break;
         }
-        /*
-        //odometria();
-        //printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
-        kh4_proximity_ir(Buffer, dsPic);
-        for (i=0;i<12;i++){
-			       sensors[i]=(Buffer[i*2] | Buffer[i*2+1]<<8);
-        }
-        
-        //printf("current angle %d  hasz key %d \n",current_angle, hasz_key);
-    if (sensors[3]>250 || sensors[4]>250 || sensors[2]>250){
-      kh4_set_speed(0, 0, dsPic);
-      break;
-    }*/
     kh4_get_position(&pos_left,&pos_right,dsPic);
     kh4_SetRGBLeds(0,0,0,0,0,0,8,0,0,dsPic);
     kh4_set_speed(sl, sr, dsPic);
@@ -529,319 +883,6 @@ void set_cell_past()
   }
   kh4_set_speed(0, 0, dsPic);
 }
-
-void check_cell_ava()
-{
-    //float resu_x,resu_y;
-    float avoidpastangle;
-    
-    check_cell();
-    int cellc,cell0,cell1,cell2,cell3,cell4,cell5,cell6,cell7;
-    int keyc;
-    //CELLC
-    item = search(hasz_key);
-   
-      if(item != NULL) {
-      //printf("Element found: %d\n", item->data);
-      cellc=item->data;
-      } else {
-        cellc=0;
-      //printf("CELLC NULL\n");
-      }
-      
-    //CELL3
-    item = search(hasz_key+100);
-      if(item != NULL) {
-      //printf("Element found: %d\n", item->data);
-      cell3=item->data;
-      
-      } else {
-      cell3=0;
-      //printf("CELL0 NULL\n");
-      }
-      printf("Cell3 %d\n", cell3);
-    
-    //CELL4
-    item = search(hasz_key+CELL_4);
-      if(item != NULL) {
-      //printf("Element found: %d\n", item->data);
-      cell4=item->data;
-      } else {
-      cell4=0;
-      //printf("CELL1 NULL\n");
-      }
-      printf("Cell4 %d\n", cell4);
-     
-    //CELL2
-      item = search(hasz_key+CELL_2);
-      if(item != NULL) {
-      //printf("Element found: %d\n", item->data);
-      cell2=item->data;
-      } else {
-      cell2=0;
-      //printf("CELL0 NULL\n");
-      }
-      printf("Cell2 %d\n", cell2);
-
-    if (cell3==0)
-    {
-      //kh4_set_speed(50,50,dsPic);
-        go_str(14745);
-        set_cell_past();
-    }
-    else if (cell3!=0)
-    {
-      if(cell4==0)
-      {
-        run_goto_heading(R_45);
-      }
-      else if(cell2==0)
-      {
-        run_goto_heading(-R_45);
-      }
-      else 
-      {
-        run_goto_heading(PI);
-      }
-    }
-    printf("hasz_key %d, result_x %f, result_y %f\n",hasz_key,result_x,result_y);
-     /*
-      //CELL3
-      item = search(hasz_key+CELL_3);
-      if(item != NULL) {
-      printf("Element found: %d\n", item->data);
-      cell3=item->data;
-      } else {
-      cell3=0;
-      printf("CELL0 NULL\n");
-      }
-      //CELL4
-      item = search(hasz_key+CELL_4);
-      if(item != NULL) {
-      printf("Element found: %d\n", item->data);
-      cell4=item->data;
-      } else {
-      cell4=0;
-      printf("CELL0 NULL\n");
-      }
-      //CELL5
-      item = search(hasz_key+CELL_5);
-      if(item != NULL) {
-      printf("Element found: %d\n", item->data);
-      cell5=item->data;
-      } else {
-      cell5=0;
-      printf("CELL0 NULL\n");
-      }
-      //CELL6
-      item = search(hasz_key+CELL_6);
-      if(item != NULL) {
-      printf("Element found: %d\n", item->data);
-      cell6=item->data;
-      } else {
-      cell6=0;
-      printf("CELL0 NULL\n");
-      }
-      //CELL7
-      item = search(hasz_key+CELL_7);
-      if(item != NULL) {
-      printf("Element found: %d\n", item->data);
-      cell7=item->data;
-      } else {
-      cell7=0;
-      printf("CELL0 NULL\n");
-      }
-    */   
-
-    check_heading();
-    
-
-
-
-    /*switch (current_angle) {
-    
-    case 3:
-        item = search(hasz_key+CELL_3);
-        if(item == NULL) {
-            avoidpastangle=HEADING_3;
-        }
-        else if (item!=NULL) {
-            item = search(hasz_key+CELL_4);  
-            if(item == NULL) {
-                avoidpastangle=HEADING_4;
-            }
-        }
-        else if (item!=NULL) {   
-            item = search(hasz_key+CELL_2);
-            if(item == NULL) {
-                avoidpastangle=HEADING_2;
-            }
-        }
-        else {        
-            avoidpastangle=-result_theta;
-            }
-
-        break;
-
-    case 4:
-        item = search(hasz_key+CELL_4);
-        if(item == NULL) {
-            avoidpastangle=HEADING_4;
-        }
-        else if (item!=NULL){
-            item = search(hasz_key+CELL_5);  
-            if(item == NULL) {
-                avoidpastangle=HEADING_5;
-            }
-        }
-        else if (item!=NULL) {   
-            item = search(hasz_key+CELL_3);
-            if(item == NULL) {
-                avoidpastangle=HEADING_3;
-            }
-        }
-        else {        
-            avoidpastangle=-result_theta;
-            }
-     break;
-     
-    case 5:
-        item = search(hasz_key+CELL_5);
-        if(item == NULL) {
-            avoidpastangle=HEADING_5;
-        }
-        else if (item!=NULL){
-            item = search(hasz_key+CELL_6);  
-            if(item == NULL) {
-                avoidpastangle=HEADING_6;
-            }
-        }
-        else if (item!=NULL){   
-            item = search(hasz_key+CELL_4);
-            if(item == NULL) {
-                avoidpastangle=HEADING_4;
-            }
-        }
-        else {        
-            avoidpastangle=-result_theta;
-            }
-     break;
-     
-    case 6:
-        item = search(hasz_key+CELL_6);
-        if(item == NULL) {
-            avoidpastangle=HEADING_6;
-        }
-        else if(item!=NULL) {
-            item = search(hasz_key+CELL_7);  
-            if(item == NULL) {
-                avoidpastangle=HEADING_7;
-            }
-        }
-        else if(item!=NULL) {   
-            item = search(hasz_key+CELL_5);
-            if(item == NULL) {
-                avoidpastangle=HEADING_5;
-            }
-        }
-        else {        
-            avoidpastangle=-result_theta;
-            }
-     break;
-     
-    case 7:
-        item = search(hasz_key+CELL_7);
-        if(item == NULL) {
-            avoidpastangle=HEADING_7;
-        }
-        else if(item!=NULL) {
-            item = search(hasz_key+CELL_6);  
-            if(item == NULL) {
-                avoidpastangle=HEADING_6;
-            }
-        }
-        else if(item!=NULL) {   
-            item = search(hasz_key+CELL_0);
-            if(item == NULL) {
-                avoidpastangle=HEADING_0;
-            }
-        }
-        else {        
-            avoidpastangle=-result_theta;
-            }
-     break;
-     
-    case 2:
-        item = search(hasz_key+CELL_2);
-        if(item == NULL) {
-            avoidpastangle=HEADING_2;
-        }
-        else if (item!=NULL){
-            item = search(hasz_key+CELL_3);  
-            if(item == NULL) {
-                avoidpastangle=HEADING_3;
-            }
-        }
-        else if(item!=NULL) {   
-            item = search(hasz_key+CELL_1);
-            if(item == NULL) {
-                avoidpastangle=HEADING_1;
-            }
-        }
-        else {        
-            avoidpastangle=-result_theta;
-            }
-     break;
-     
-    case 1:
-        item = search(hasz_key+CELL_1);
-        if(item == NULL) {
-            avoidpastangle=HEADING_1;
-        }
-        else if(item!=NULL) {
-            item = search(hasz_key+CELL_2);  
-            if(item == NULL) {
-                avoidpastangle=HEADING_2;
-            }
-        }
-        else if(item!=NULL) {   
-            item = search(hasz_key+CELL_0);
-            if(item == NULL) {
-                avoidpastangle=HEADING_0;
-            }
-        }
-        else {        
-            avoidpastangle=-result_theta;
-            }
-     break;
-    case 0:
-                item = search(hasz_key+CELL_0);
-        if(item == NULL) {
-            avoidpastangle=HEADING_0;
-        }
-        else if(item!=NULL) {
-            item = search(hasz_key+CELL_7);  
-            if(item == NULL) {
-                avoidpastangle=HEADING_7;
-            }
-        }
-        else if (item!=NULL){   
-            item = search(hasz_key+CELL_1);
-            if(item == NULL) {
-                avoidpastangle=HEADING_1;
-            }
-        }
-        else {        
-            avoidpastangle=-result_theta;
-            }
-     break;
-   //default: instrukcje, jeśli żaden z wcześniejszych warunków nie został spełniony 
-  //break;
- 
- }*/
- wish_angle=avoidpastangle+result_theta;
-}
-
 /**********************************************************************************************
  * *******************************************************************************************/
 
@@ -852,9 +893,6 @@ void check_cell_ava()
 
 /**********************************************************************************************
  * *******************************************************************************************/
-
-
-
 
 /**********************************************************************************************
  * *******************************************************************************************/
@@ -863,36 +901,37 @@ int test()
     //xytxt = fopen(PLIK_XY,"w");
     datatxt = fopen(PLIK_US,"w");
     kh4_activate_us(31,dsPic); //wl. ultradzwiekowe
-    int i;
+    int i,j;
     float f[5];
     int ii,jj;
     int mapka[2][3];
     int poz_l,poz_r;
     int us_heading;
     float kierunek;
+
 	kh4_SetSpeedProfile(accinc,accdiv,minspacc, minspdec,maxsp,dsPic ); // Acceleration increment ,  Acceleration divider, Minimum speed acc, Minimum speed dec, maximum speed
 	kh4_SetMode(kh4RegSpeedProfile,dsPic);
 	//inicjalizacja odometrii
-	kh4_get_position(&pos_left,&pos_right,dsPic);
-  set_bound();
-    odometria_init();
     printf("Predkosci kol\n");
     printf("Lewe:");
     scanf("%d", &sl);
     printf("Prawe:");
     scanf("%d", &sr);
     kh4_set_speed(0, 0, dsPic);
-   /* for(ii=0;ii<2;ii++){
-		    for(jj=0;jj<3;jj++){
-          mapka[ii][jj]=0;
-		}
-	}
-  for(ii=0;ii<100;ii++){
-    for(jj=0;jj<100;jj++){
-      ava_tab[ii][jj]=0;
-  }
-}*/
-kh4_measure_us(Buffer,dsPic);
+    kh4_get_position(&pos_left,&pos_right,dsPic);
+// inicjalizacja funkcji
+    create_map();
+    odometria_init();
+    odometria();
+    check_heading();
+    check_curr_point();
+    set_current_point();
+    map[2][1]=1;
+
+    printf("Orientacja %f %f %f\ncurr p %d %d\n",result_x, result_y, result_theta,cur_x,cur_y);
+    
+
+    /*kh4_measure_us(Buffer,dsPic);
         for (i=0;i<5;i++){
         	usvalues[i] = (short)(Buffer[i*2] | Buffer[i*2+1]<<8);
           if(usvalues[i]>MAX_US_DIST){
@@ -901,20 +940,13 @@ kh4_measure_us(Buffer,dsPic);
           else if(usvalues[i]<MIN_US_DIST){
             usvalues[i]=0;
           }
-        }
-//set_cell_past();
-//check_cell_ava();
-
-//run_goto_heading(result_theta + kierunek);
-//go_str(14745);
-//kh4_set_speed(0, 0, dsPic);
-insert(801,1);
+        }*/
 	while(!kb_kbhit()){
     kb_clrscr();
     printf("\nNacisnij klawisz aby zatrzymac\n");
-    kh4_get_position(&pos_left,&pos_right,dsPic);
-    odometria();
-    kh4_proximity_ir(Buffer, dsPic);
+    printf("**********************************\n");
+//POMIARY
+   /* kh4_proximity_ir(Buffer, dsPic);
         for (i=0;i<12;i++){
 			       sensors[i]=(Buffer[i*2] | Buffer[i*2+1]<<8);
         }
@@ -927,37 +959,49 @@ insert(801,1);
           else if(usvalues[i]<MIN_US_DIST){
             usvalues[i]=0;
           }
-        }
-    
-    check_cell_ava();
-    
-    //run_goto_heading(wish_angle);
-    //go_str(14745);
-    //sleep(2);
-    /*    
-    if (usvalues[2]>25)
-    {
-      kierunek=A_US_2;
-    }
-    else if (usvalues[0]<usvalues[4] && usvalues[0]>24){
-      kierunek=A_US_0;
-    }
-    else if (usvalues[0]>usvalues[4] && usvalues[4]>24){
-      kierunek=A_US_4;
-    }
-    else {
-    kierunek=3.14;
-    }
-    run_goto_heading(kierunek);
-    go_str(14745);
-    kh4_set_speed(0, 0, dsPic);
-    */  
-
-    printf("Czujniki us\nL 90 (0): %d\nFL 45 (1): %d\nF 0(2): %d\nFR 45 (3): %d\nR 90 (4): %d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
-    fprintf(datatxt,"%.4f %.4f %.4f %d %d %d %d %d\n",result_x, result_y, result_theta, usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
+        }*/
+    kh4_get_position(&pos_left,&pos_right,dsPic);    
+//FUNCKJE
+    odometria();
+    check_heading();
+    check_curr_point();
+    check_past_points();
+    check_space();
+    show_goal_param(2.0,0.0);
+    set_current_point();
+    update_map();
     printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
-
-    usleep(10000);
+    printf("Aktualna komorka %d %d\n",cur_x,cur_y);
+    printf("Current angle %d Correct angle %f\n",current_angle,correct_angle);
+    printf("past theta %f space angle %f\n", avoid_past_theta, check_space_angle);
+    //printf("dist %f goaltheta %f\n",dist,goaltheta);
+    //printf ("us %f %f %f %f %f\n",usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
+    for (j=0;j<22;j++)
+    {
+        for(i=0;i<22;i++)
+        {
+            printf("%d ",map[22-j-1][i]);
+        }
+        printf("\n");
+    }
+    //printf("Czujniki us\nL 90 (0): %d\nFL 45 (1): %d\nF 0(2): %d\nFR 45 (3): %d\nR 90 (4): %d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
+    //fprintf(datatxt,"%.4f %.4f %.4f %d %d %d %d %d\n",result_x, result_y, result_theta, usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
+    
+    //if (current_angle!=4){
+        //run_goto_heading(R_45);
+    //}
+    //go_front(14745);
+    /*
+    if (map[cur_x+1][cur_y]!=0)
+    {
+        kh4_set_speed(0,0,dsPic);
+        printf ("STOP\n");
+    }
+    else{
+        go_front(14745);
+    }
+    */
+    usleep(100000);
     }
     //tcflush(0, TCIFLUSH); // flush input
     kh4_set_speed(0,0,dsPic ); // stop robot
@@ -1025,6 +1069,7 @@ int main(int argc, char * argv[])
     //tcflush(0, TCIFLUSH); //?????
     break;
   }
+
 //zakończenie działania
 //fclose(xytxt);
 fclose(datatxt);
