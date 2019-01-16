@@ -102,9 +102,11 @@ float avoid_past_theta;
 float dist,goaltheta;
 float correct_angle;
 float check_space_angle;
+int kier_f,kier_l,kier_r;
 int ava_tab[100][100];
-int mapx[8];
-int mapy[8];
+//int mapx[8];
+//int mapy[8];
+int cell[8];
 FILE *xytxt;
 FILE *datatxt;
 struct DataItem {
@@ -159,8 +161,8 @@ void odometria_init()
     speed_right_internal = 0;
     r_speed_left = 0;
     r_speed_right = 0;
-    result_x = 0.1;
-    result_y = 0.1;
+    result_x = 1.0;
+    result_y = 1.0;
     result_theta = 0;
     //timestamp = 0;
 
@@ -217,22 +219,30 @@ void check_curr_point()
     int ress_y=res_y;
     cur_x=ress_x;
     cur_y=ress_y;
-    mapx[0]=cur_x-1;
-    mapy[0]=cur_y-1;
-    mapx[1]=cur_x;
-    mapy[1]=cur_y-1;
-    mapx[2]=cur_x+1;
-    mapy[2]=cur_y-1;
-    mapx[3]=cur_x+1;
-    mapy[3]=cur_y;
-    mapx[4]=cur_x+1;
-    mapy[4]=cur_y+1;
-    mapx[5]=cur_x;
-    mapy[5]=cur_y+1;
-    mapx[6]=cur_x-1;
-    mapy[6]=cur_y+1;
-    mapx[7]=cur_x-1;
-    mapy[7]=cur_y;
+    /*mapx[0]=-1;
+    mapy[0]=-1;
+    mapx[1]=0;
+    mapy[1]=-1;
+    mapx[2]=1;
+    mapy[2]=-1;
+    mapx[3]=1;
+    mapy[3]=0;
+    mapx[4]=1;
+    mapy[4]=1;
+    mapx[5]=0;
+    mapy[5]=1;
+    mapx[6]=-1;
+    mapy[6]=1;
+    mapx[7]=-1;
+    mapy[7]=0;*/
+    cell[0]=map[cur_x-1][cur_y-1];
+    cell[1]=map[cur_x][cur_y-1];
+    cell[2]=map[cur_x+1][cur_y-1];
+    cell[3]=map[cur_x+1][cur_y];
+    cell[4]=map[cur_x+1][cur_y+1];
+    cell[5]=map[cur_x][cur_y+1];
+    cell[6]=map[cur_x-1][cur_y+1];
+    cell[7]=map[cur_x-1][cur_y];
 
 }
 /**********************************************************************************************
@@ -257,7 +267,8 @@ void update_map()
             usvalues[i]=0;
           }
     }
-    usleep(100000);
+    usleep(10000);
+    map[cur_x][cur_y]=1;
     double us_value[5];
     int us_values[5];
     for (i=0;i<5;i++){
@@ -265,154 +276,205 @@ void update_map()
         us_value[i] = floor(us_value[i]);
         us_values[i] = us_value[i];
     }
-    int map0x=cur_x-1;
-    int map0y=cur_y-1;
-    int usx,usy;
-    usx=
-    usy=
-    map[cur_x+us_values[2]][cur_y]=us_values[2];   //front
-    map[cur_x+us_values[1]-1][cur_y-us_values[1]-1]=us_values[1];   //front left
-    map[cur_x+us_values[3]-1][cur_y+us_values[3]-1]=us_values[3];   //front right
-    map[cur_x][cur_y-us_values[0]]=us_values[0];   //left
-    map[cur_x][cur_y+us_values[4]]=us_values[4];   //right/
-
-
+    int usx[5],usy[5];
+    //kierunek -135
     if (current_angle==0){
-        kier_f=map[cur_x-1][cur_y-1];
-        kier_l=map[cur_x-1][cur_y];
-        kier_r=map[cur_x][cur_y-1];
+        //US 2 front
+        usx[2]=cur_x-us_values[2]+1;
+        usy[2]=cur_y-us_values[2]+1;
+        //map[usx[2]][usy[2]]=us_values[2];
+        //US 1 front left
+        usx[1]=cur_x-us_values[1];
+        usy[1]=cur_y;
+        //map[usx[1]][usy[1]]=us_values[1];
+        //US 3 front right
+        usx[3]=cur_x;
+        usy[3]=cur_y-us_values[3];
+        //map[usx[3]][usy[3]]=us_values[3];
+        //US 0 left
+        usx[0]=cur_x-us_values[0]+1;
+        usy[0]=cur_y+us_values[0]-1;
+        //map[usx[0]][usy[0]]=us_values[0];
+        //US 4 right
+        usx[4]=cur_x+us_values[4]-1;
+        usy[4]=cur_y-us_values[4]+1;
+        //map[usx[4]][usy[4]]=us_values[4];
         
-        if(kier_f==0){
-            avoid_past_theta=-2.356194;
-        }
-        else if (kier_l==0){
-            avoid_past_theta=3.141593;
-        }
-        else if (kier_r==0){
-            avoid_past_theta=-1.570796;
-        }
-        else {avoid_past_theta=0.785398;}
     }
     //kierunek -90
     else if (current_angle==1){
-        kier_f=map[cur_x][cur_y-1];
-        kier_l=map[cur_x-1][cur_y-1];
-        kier_r=map[cur_x+1][cur_y-1];
-        
-        if(kier_f==0){
-            avoid_past_theta=-1.570796;
-        }
-        else if (kier_l==0){
-            avoid_past_theta=-2.356194;
-        }
-        else if (kier_r==0){
-            avoid_past_theta=-0.785398;
-        }
-        else {avoid_past_theta=1.570796;}
+        //US 2 front
+        usx[2]=cur_x;
+        usy[2]=cur_y-us_values[2];
+        //map[usx[2]][usy[2]]=us_values[2];
+        //US 1 front left
+        usx[1]=cur_x-us_values[1]+1;
+        usy[1]=cur_y-us_values[1]+1;
+        //map[usx[1]][usy[1]]=us_values[1];
+        //US 3 front right
+        usx[3]=cur_x+us_values[3]-1;
+        usy[3]=cur_y-us_values[3]+1;
+        //map[usx[3]][usy[3]]=us_values[3];
+        //US 0 left
+        usx[0]=cur_x-us_values[0];
+        usy[0]=cur_y;
+        //map[usx[0]][usy[0]]=us_values[0];
+        //US 4 right
+        usx[4]=cur_x+us_values[4];
+        usy[4]=cur_y;
+        //map[usx[4]][usy[4]]=us_values[4]; 
+
     }
     //kierunek -45
     else if (current_angle==2){
-        kier_f=map[cur_x+1][cur_y-1];
-        kier_l=map[cur_x][cur_y-1];
-        kier_r=map[cur_x+1][cur_y];
+        //US 2 front
+        usx[2]=cur_x+us_values[2]-1;
+        usy[2]=cur_y-us_values[2]+1;
+        //map[usx[2]][usy[2]]=us_values[2];
+        //US 1 front left
+        usx[1]=cur_x;
+        usy[1]=cur_y-us_values[1];
+        //map[usx[1]][usy[1]]=us_values[1];
+        //US 3 front right
+        usx[3]=cur_x+us_values[3];
+        usy[3]=cur_y;
+        //map[usx[3]][usy[3]]=us_values[3];
+        //US 0 left
+        usx[0]=cur_x-us_values[0]+1;
+        usy[0]=cur_y-us_values[0]+1;
+        //map[usx[0]][usy[0]]=us_values[0];
+        //US 4 right
+        usx[4]=cur_x+us_values[4]-1;
+        usy[4]=cur_y+us_values[4]-1;
+        //map[usx[4]][usy[4]]=us_values[4];
         
-        if(kier_f==0){
-            avoid_past_theta=-0.785398;
-        }
-        else if (kier_l==0){
-            avoid_past_theta=-1.570796;
-        }
-        else if (kier_r==0){
-            avoid_past_theta=0;
-        }
-        else {avoid_past_theta=2.356194;}
     }
     //kierunek 0
     else if (current_angle==3){
-        kier_f=map[cur_x+1][cur_y];
-        kier_l=map[cur_x+1][cur_y-1];
-        kier_r=map[cur_x+1][cur_y+1];
-        
-        if(kier_f==0){
-            avoid_past_theta=0;
-        }
-        else if (kier_l==0){
-            avoid_past_theta=-0.785398;
-        }
-        else if (kier_r==0){
-            avoid_past_theta=0.785398;
-        }
-        else {avoid_past_theta=PI;}
+        //US 2 front
+        usx[2]=cur_x+us_values[2];
+        usy[2]=cur_y;
+        //map[usx[2]][usy[2]]=us_values[2];
+        //US 1 front left
+        usx[1]=cur_x+us_values[1]-1;
+        usy[1]=cur_y-us_values[1]+1;
+        //map[usx[1]][usy[1]]=us_values[1];
+        //US 3 front right
+        usx[3]=cur_x+us_values[3]-1;
+        usy[3]=cur_y+us_values[3]-1;
+        //map[usx[3]][usy[3]]=us_values[3];
+        //US 0 left
+        usx[0]=cur_x;
+        usy[0]=cur_y-us_values[0]+1;
+        //map[usx[0]][usy[0]]=us_values[0];
+        //US 4 right
+        usx[4]=cur_x;
+        usy[4]=cur_y+us_values[4];
+        //map[usx[4]][usy[4]]=us_values[4];
     }
     //kierunek 45
     else if (current_angle==4){
-        kier_f=map[cur_x+1][cur_y+1];
-        kier_l=map[cur_x+1][cur_y];
-        kier_r=map[cur_x][cur_y+1];
-        
-        if(kier_f==0){
-            avoid_past_theta=0.785398;
-        }
-        else if (kier_l==0){
-            avoid_past_theta=0;
-        }
-        else if (kier_r==0){
-            avoid_past_theta=1.570796;
-        }
-        else {avoid_past_theta=PI;}
+        //US 2 front
+        usx[2]=cur_x+us_values[2]-1;
+        usy[2]=cur_y+us_values[2]-1;
+        //map[usx[2]][usy[2]]=us_values[2];
+        //US 1 front left
+        usx[1]=cur_x+us_values[1];
+        usy[1]=cur_y;
+        //map[usx[1]][usy[1]]=us_values[1];
+        //US 3 front right
+        usx[3]=cur_x;
+        usy[3]=cur_y+us_values[3];
+        //map[usx[3]][usy[3]]=us_values[3];
+        //US 0 left
+        usx[0]=cur_x+us_values[0]-1;
+        usy[0]=cur_y-us_values[0]+1;
+        //map[usx[0]][usy[0]]=us_values[0];
+        //US 4 right
+        usx[4]=cur_x-us_values[4]+1;
+        usy[4]=cur_y+us_values[4]-1;
+        //map[usx[4]][usy[4]]=us_values[4];
     }
     //kierunek 90
     else if (current_angle==5){
-        kier_f=map[cur_x][cur_y+1];
-        kier_l=map[cur_x+1][cur_y+1];
-        kier_r=map[cur_x-1][cur_y+1];
-        
-        if(kier_f==0){
-            avoid_past_theta=1.570796;
-        }
-        else if (kier_l==0){
-            avoid_past_theta=0.785398;
-        }
-        else if (kier_r==0){
-            avoid_past_theta=2.356194;
-        }
-        else {avoid_past_theta=-1.570796;}
+        //US 2 front
+        usx[2]=cur_x;
+        usy[2]=cur_y+us_values[2];
+        //map[usx[2]][usy[2]]=us_values[2];
+        //US 1 front left
+        usx[1]=cur_x+us_values[1]-1;
+        usy[1]=cur_y+us_values[1]-1;
+        //map[usx[1]][usy[1]]=us_values[1];
+        //US 3 front right
+        usx[3]=cur_x-us_values[3]+1;
+        usy[3]=cur_y+us_values[3]-1;
+        //map[usx][usy]=us_values[3];
+        //US 0 left
+        usx[0]=cur_x+us_values[0];
+        usy[0]=cur_y;
+        //map[usx[0]][usy[0]]=us_values[0];
+        //US 4 right
+        usx[4]=cur_x-us_values[4];
+        usy[4]=cur_y;
+        //map[usx[4]][usy[4]]=us_values[4];
     }
     //kierunek 135
     else if (current_angle==6){
-        kier_f=map[cur_x-1][cur_y+1];
-        kier_l=map[cur_x][cur_y+1];
-        kier_r=map[cur_x-1][cur_y];
-        
-        if(kier_f==0){
-            avoid_past_theta=2.356194;
-        }
-        else if (kier_l==0){
-            avoid_past_theta=1.570796;
-        }
-        else if (kier_r==0){
-            avoid_past_theta=PI;
-        }
-        else {avoid_past_theta=0.785398;}
+        //US 2 front
+        usx[2]=cur_x-us_values[2]+1;
+        usy[2]=cur_y+us_values[2]-1;
+        //map[usx[2]][usy[2]]=us_values[2];
+        //US 1 front left
+        usx[1]=cur_x;
+        usy[1]=cur_y+us_values[1];
+        //map[usx[1]][usy[1]]=us_values[1];
+        //US 3 front right
+        usx[3]=cur_x-us_values[3];
+        usy[3]=cur_y;
+        //map[usx[3]][usy[3]]=us_values[3];
+        //US 0 left
+        usx[0]=cur_x+us_values[0]-1;
+        usy[0]=cur_y+us_values[0]-1;
+        //map[usx[0]][usy[0]]=us_values[0];
+        //US 4 right
+        usx[4]=cur_x-us_values[4]+1;
+        usy[4]=cur_y-us_values[4]+1;
+        //map[usx[4]][usy[4]]=us_values[4];
     }
     //kierunek 180
     else if (current_angle==7){
-        kier_f=map[cur_x-1][cur_y];
-        kier_l=map[cur_x-1][cur_y+1];
-        kier_r=map[cur_x-1][cur_y-1];
-        
-        if(kier_f==0){
-            avoid_past_theta=PI;
-        }
-        else if (kier_l==0){
-            avoid_past_theta=2.356194;
-        }
-        else if (kier_r==0){
-            avoid_past_theta=-2.356194;
-        }
-        else {avoid_past_theta=0.785398;}
+        //US 2 front
+        usx[2]=cur_x-us_values[2];
+        usy[2]=cur_y;
+        //map[usx[2]][usy[2]]=us_values[2];
+        //US 1 front left
+        usx[1]=cur_x-us_values[1]+1;
+        usy[1]=cur_y+us_values[1]-1;
+        //map[usx[1]][usy[1]]=us_values[1];
+        //US 3 front right
+        usx[3]=cur_x-us_values[3]+1;
+        usy[3]=cur_y-us_values[3]+1;
+        //map[usx[3]][usy[3]]=us_values[3];
+        //US 0 left
+        usx[0]=cur_x;
+        usy[0]=cur_y+us_values[0];
+        //map[usx[0]][usy[0]]=us_values[0];
+        //US 4 right
+        usx[4]=cur_x;
+        usy[4]=cur_y-us_values[4];
+        //map[usx[4]][usy[4]]=us_values[4];
     }
-    else {avoid_past_theta=666666;}
+
+    for(i=0;i<5;i++)
+    {
+    if (usx[i] > 1 && usx[i] < 21 && usy[i] > 1 && usy[i] < 21)
+    {
+        map[usx[i]][usy[i]]=us_values[i];
+    }
+    //else 
+    }
+
+    //else {avoid_past_theta=666666;}
 }
 /**********************************************************************************************
  *********************************************************************************************/
@@ -471,7 +533,7 @@ void check_heading()
 /**********************************************************************************************
  *********************************************************************************************/
 void check_past_points()
-{   int kier_f,kier_l,kier_r;
+{   
     check_heading();
     //kierunek -135
     if (current_angle==0){
@@ -627,11 +689,21 @@ void check_space()
           }
         }
     //check_heading();
-    if (usvalues[2] > 30){check_space_angle=correct_angle;}
-    else if (usvalues[1] > 30){check_space_angle=correct_angle-R_45;}
-    else if (usvalues[3] > 30){check_space_angle=correct_angle+R_45;}
-    else if (usvalues[0] > 30){check_space_angle=correct_angle-R_90;}
-    else if (usvalues[4] > 30){check_space_angle=correct_angle+R_90;}
+    int i_maxus=2;
+    maxus=usvalues[2];
+    for (i=0;i<5;i++)
+    {
+        if (usvalues[i] > maxus){
+            maxus=usvalues[2];
+            i_maxus=i;
+            }
+    }
+
+    if (usvalues[2] > 50){check_space_angle=correct_angle;}
+    else if (usvalues[1] > 50){check_space_angle=correct_angle-R_45;}
+    else if (usvalues[3] > 50){check_space_angle=correct_angle+R_45;}
+    else if (usvalues[0] > 50){check_space_angle=correct_angle-R_90;}
+    else if (usvalues[4] > 50){check_space_angle=correct_angle+R_90;}
     else {check_space_angle=correct_angle+PI;}
 }
 void go_front(int pozycja)
@@ -922,14 +994,28 @@ int test()
 // inicjalizacja funkcji
     create_map();
     odometria_init();
-    odometria();
-    check_heading();
-    check_curr_point();
-    set_current_point();
-    map[2][1]=1;
-
-    printf("Orientacja %f %f %f\ncurr p %d %d\n",result_x, result_y, result_theta,cur_x,cur_y);
+    ii=0;
+    while(ii<2)
+    {
+        odometria();
+        check_heading();
+        check_curr_point();
+        set_current_point();
+        check_past_points();
+        update_map();
+        usleep(100000);
+        run_goto_heading(result_theta+PI);
+        usleep(10000)0;
+        ii++;
+    }
     
+    
+    
+      
+    //map[2][1]=1;
+    
+    printf("Orientacja %f %f %f\ncurr p %d %d\n",result_x, result_y, result_theta,cur_x,cur_y);
+    usleep(5000000);
 
     /*kh4_measure_us(Buffer,dsPic);
         for (i=0;i<5;i++){
@@ -965,11 +1051,14 @@ int test()
     odometria();
     check_heading();
     check_curr_point();
+    set_current_point();
     check_past_points();
     check_space();
     show_goal_param(2.0,0.0);
-    set_current_point();
     update_map();
+
+
+    
     printf("Aktualna pozycja robota: x: %.3f  y: %.3f  kat: %.6f\n",result_x, result_y, result_theta);
     printf("Aktualna komorka %d %d\n",cur_x,cur_y);
     printf("Current angle %d Correct angle %f\n",current_angle,correct_angle);
@@ -984,13 +1073,14 @@ int test()
         }
         printf("\n");
     }
+    
     //printf("Czujniki us\nL 90 (0): %d\nFL 45 (1): %d\nF 0(2): %d\nFR 45 (3): %d\nR 90 (4): %d\n", usvalues[0], usvalues[1], usvalues[2], usvalues[3], usvalues[4]);
     //fprintf(datatxt,"%.4f %.4f %.4f %d %d %d %d %d\n",result_x, result_y, result_theta, usvalues[0],usvalues[1],usvalues[2],usvalues[3],usvalues[4]);
     
     //if (current_angle!=4){
         //run_goto_heading(R_45);
     //}
-    //go_front(14745);
+    go_front(14745);
     /*
     if (map[cur_x+1][cur_y]!=0)
     {
